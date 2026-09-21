@@ -1,9 +1,5 @@
 const menu=document.querySelector('.menu'),nav=document.querySelector('nav');
 menu?.addEventListener('click',()=>{const open=nav.classList.toggle('open');menu.setAttribute('aria-expanded',String(open))});
-const observer=new IntersectionObserver(entries=>entries.forEach(entry=>{if(entry.isIntersecting){entry.target.classList.add('visible');observer.unobserve(entry.target)}}),{threshold:.12});
-document.querySelectorAll('.reveal').forEach(el=>observer.observe(el));
-if(matchMedia('(prefers-reduced-motion: reduce)').matches)document.querySelectorAll('.reveal').forEach(el=>el.classList.add('visible'));
-
 const search=document.querySelector('#article-search');
 const filters=[...document.querySelectorAll('.filter')];
 const libraryCards=[...document.querySelectorAll('#library-grid .article-card')];
@@ -23,7 +19,11 @@ function updateLibrary(){
 }
 filters.forEach(button=>button.addEventListener('click',()=>{
   activeFilter=button.dataset.filter;
-  filters.forEach(x=>x.classList.toggle('active',x===button));
+  filters.forEach(x=>{x.classList.toggle('active',x===button);x.setAttribute('aria-pressed',String(x===button))});
   updateLibrary();
 }));
 search?.addEventListener('input',updateLibrary);
+
+nav?.addEventListener('click',e=>{if(e.target.closest('a')){nav.classList.remove('open');menu?.setAttribute('aria-expanded','false')}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&nav?.classList.contains('open')){nav.classList.remove('open');menu?.setAttribute('aria-expanded','false');menu?.focus()}});
+filters.forEach(x=>x.setAttribute('aria-pressed',String(x.classList.contains('active'))));

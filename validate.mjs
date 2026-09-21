@@ -25,4 +25,3 @@ if(sitemapUrls!==html.length)problems.push(`sitemap has ${sitemapUrls} URLs for 
 if(problems.length){console.error(problems.join('\n'));process.exit(1)}
 console.log(`Validated ${html.length} HTML pages, internal links, JSON-LD, AdSense and sitemap.`);
 
-
