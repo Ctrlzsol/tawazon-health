@@ -20,7 +20,7 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 const ads=`<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${PUBLISHER}" crossorigin="anonymous"></script>`;
 function shell(title,description,body,canonical,schema=''){
 return `<!doctype html>
-<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="google-site-verification" content="beSz96gFB1TL9aSgmemG8sfr4MbyrISjvNI-6TOKveU">
 <title>${esc(title)}</title><meta name="description" content="${esc(description)}"><meta name="robots" content="index,follow,max-image-preview:large"><link rel="canonical" href="${canonical}">
 <meta property="og:type" content="website"><meta property="og:locale" content="ar_AR"><meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(description)}"><meta property="og:url" content="${canonical}"><meta property="og:image" content="${BASE}/social-card.svg"><meta name="twitter:card" content="summary_large_image"><meta name="theme-color" content="#0b1612">
 <link rel="icon" href="/logo.svg"><link rel="alternate" type="application/rss+xml" title="مقالات توازن" href="/feed.xml"><link rel="stylesheet" href="/style.css">${ads}${schema}</head><body><a class="skip-link" href="#main">انتقل إلى المحتوى</a>
@@ -79,4 +79,5 @@ fs.mkdirSync(output,{recursive:true});
 for(const name of fs.readdirSync(ROOT)){
  if(/\.(html|css|js|svg|xml|txt)$/.test(name))fs.copyFileSync(path.join(ROOT,name),path.join(output,name));
 }
+
 
