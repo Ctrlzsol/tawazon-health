@@ -149,6 +149,7 @@ fs.mkdirSync(output,{recursive:true});
 for(const name of fs.readdirSync(ROOT)){
  if(/\.(html|css|js|svg|xml|txt)$/.test(name))fs.copyFileSync(path.join(ROOT,name),path.join(output,name));
 }
-
-
-
+const publicDir=path.join(ROOT,'public');
+if(fs.existsSync(publicDir)){
+ for(const name of fs.readdirSync(publicDir))fs.copyFileSync(path.join(publicDir,name),path.join(output,name));
+}
