@@ -43,3 +43,13 @@ jobs:
             status=$(curl -sS --retry 3 --max-time 20 -o /tmp/indexnow-response -w '%{http_code}' "https://api.indexnow.org/indexnow?url=${encoded}&key=${KEY}")
             case "$status" in 200|202) echo "IndexNow ${path} -> HTTP ${status}" ;; *) echo "IndexNow ${path} -> HTTP ${status}"; cat /tmp/indexnow-response; exit 1 ;; esac
           done
+
+      - name: Publish Tawazon feed to WebSub
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --max-time 20 -X POST \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'hub.mode=publish' \
+            --data-urlencode "hub.url=${SITE}/feed.xml" \
+            https://pubsubhubbub.appspot.com/
