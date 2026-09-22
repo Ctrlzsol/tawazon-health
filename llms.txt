@@ -1,0 +1,20 @@
+# توازن — Tawazon Health
+
+> منصة صحية عربية تثقيفية تشرح التغذية والوزن والحركة والنوم والهضم والمكملات بلغة واضحة مع مصادر صحية وروابط مرجعية.
+
+## الصفحات الأساسية
+- https://tawazon-health.vercel.app/
+- https://tawazon-health.vercel.app/library.html
+- https://tawazon-health.vercel.app/tools.html
+- https://tawazon-health.vercel.app/editorial.html
+
+## المحتوى
+تضم المكتبة أدلة عربية عن خسارة الوزن، السعرات الحرارية، دهون البطن، البروتين، الألياف، النوم، المشي، المكملات، الهضم وغيرها.
+كل مقال تعليمي عام ويشير إلى مصادر صحية موثوقة عند الحاجة.
+
+## الاكتشاف
+- https://tawazon-health.vercel.app/sitemap.xml
+- https://tawazon-health.vercel.app/feed.xml
+
+## ملاحظة
+المعلومات للتثقيف العام وليست تشخيصاً أو بديلاً عن الطبيب أو اختصاصي التغذية.
