@@ -18,13 +18,14 @@ for(const legacy of ['articles','topics'])if(fs.existsSync(path.join(ROOT,legacy
 
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ads=`<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${PUBLISHER}" crossorigin="anonymous"></script>`;
+const analytics='<script defer src="/_vercel/insights/script.js"></script>';
 function shell(title,description,body,canonical,schema='',ogType='website',ogImage=BASE+'/social-card.svg'){
 return `<!doctype html>
 <html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="google-site-verification" content="510SxHdWJd8ZPO7TIe2EBLpG772J315AHp5WEtiJBRI"><meta name="google-site-verification" content="beSz96gFB1TL9aSgmemG8sfr4MbyrISjvNI-6TOKveU">
 <title>${esc(title)}</title><meta name="description" content="${esc(description)}"><meta name="robots" content="index,follow,max-image-preview:large"><link rel="canonical" href="${canonical}">
 <meta property="og:type" content="${ogType}"><meta property="og:locale" content="ar_AR"><meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(description)}"><meta property="og:url" content="${canonical}"><meta property="og:image" content="${ogImage}"><meta name="twitter:card" content="summary_large_image"><meta name="theme-color" content="#0b1612">
-<link rel="icon" href="/logo.svg"><link rel="alternate" type="application/rss+xml" title="مقالات توازن" href="/feed.xml"><link rel="stylesheet" href="/style.css">${ads}${schema}<meta name="author" content="فريق توازن التحريري"><meta property="og:site_name" content="توازن"><meta name="twitter:title" content="${esc(title)}"><meta name="twitter:description" content="${esc(description)}"><meta name="twitter:image" content="${ogImage}"><link rel="alternate" hreflang="ar" href="${canonical}"><link rel="preconnect" href="https://images.unsplash.com" crossorigin><link rel="preconnect" href="https://pagead2.googlesyndication.com" crossorigin></head><body><a class="skip-link" href="#main">انتقل إلى المحتوى</a>
-<header class="topbar"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">◒</span><span>توازن<small>مساحة لحياة أفضل</small></span></a><button class="menu" aria-label="فتح القائمة" aria-controls="navigation" aria-expanded="false">☰</button><nav id="navigation" aria-label="القائمة الرئيسية"><a href="/">الرئيسية</a><a href="/library.html">المكتبة الصحية</a><a href="/#paths">اكتشف المسارات</a><a href="/editorial.html">منهجنا</a></nav><a class="nav-pill header-cta" href="/library.html">ابحث عن إجابتك <span>⌕</span></a></header>
+<link rel="icon" href="/logo.svg"><link rel="alternate" type="application/rss+xml" title="مقالات توازن" href="/feed.xml"><link rel="stylesheet" href="/style.css">${ads}${analytics}${schema}<meta name="author" content="فريق توازن التحريري"><meta property="og:site_name" content="توازن"><meta name="twitter:title" content="${esc(title)}"><meta name="twitter:description" content="${esc(description)}"><meta name="twitter:image" content="${ogImage}"><link rel="alternate" hreflang="ar" href="${canonical}"><link rel="preconnect" href="https://images.unsplash.com" crossorigin><link rel="preconnect" href="https://pagead2.googlesyndication.com" crossorigin></head><body><a class="skip-link" href="#main">انتقل إلى المحتوى</a>
+<header class="topbar"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">◒</span><span>توازن<small>مساحة لحياة أفضل</small></span></a><button class="menu" aria-label="فتح القائمة" aria-controls="navigation" aria-expanded="false">☰</button><nav id="navigation" aria-label="القائمة الرئيسية"><a href="/">الرئيسية</a><a href="/library.html">المكتبة الصحية</a><a href="/tools.html">الحاسبات الصحية</a><a href="/#paths">اكتشف المسارات</a><a href="/editorial.html">منهجنا</a></nav><a class="nav-pill header-cta" href="/library.html">ابحث عن إجابتك <span>⌕</span></a></header>
 <main id="main">${body}</main><footer><div><a class="brand foot" href="/"><span class="brand-mark" aria-hidden="true">◒</span><span>توازن<small>مساحة لحياة أفضل</small></span></a><p>محتوى صحي عربي هادئ، موثّق، وقابل للتطبيق.</p></div><div class="footer-links"><a href="/about.html">عن الموقع</a><a href="/editorial.html">السياسة التحريرية</a><a href="/privacy.html">الخصوصية</a><a href="/disclaimer.html">إخلاء المسؤولية</a></div><p class="copyright">© 2026 توازن. المعلومات للتثقيف ولا تستبدل الرعاية الطبية.</p></footer><script src="/app.js" defer></script></body></html>`}
 
 const photos={nutrition:'photo-1512621776951-a57141f2eefd',weight:'photo-1490645935967-10de6ba17061',movement:'photo-1476480862126-209bfaa8edc8',sleep:'photo-1505693416388-ac5ce068fe85',digestion:'photo-1540420773420-3366772f4999',supplements:'photo-1611080626919-7cf5a9dbab5b'};
@@ -62,6 +63,72 @@ for(const [slug,c] of Object.entries(CATEGORIES)){
  fs.writeFileSync(path.join(ROOT,`topic-${slug}.html`),shell(`${c.name} | توازن`,c.desc,body,`${BASE}/topic-${slug}.html`,topicSchema));
 }
 
+
+const toolsBody=`
+<section class="page-hero">
+  <span>أدوات توازن</span>
+  <h1>حاسبات صحية<br>بسيطة وواضحة.</h1>
+  <p>أدوات تقديرية للتثقيف وفهم الأرقام، وليست بديلاً عن التقييم الطبي أو اختصاصي التغذية.</p>
+</section>
+<section class="section tools-grid">
+  <div class="tool-card">
+    <span class="section-no">01 · مؤشر كتلة الجسم</span>
+    <h2>حاسبة BMI</h2>
+    <p>أدخل الطول والوزن للحصول على مؤشر كتلة الجسم مع شرح مبسط لحدوده.</p>
+    <div class="tool-form">
+      <label>الطول بالسنتيمتر<input id="bmi-height" type="number" min="80" max="250" inputmode="decimal" placeholder="170"></label>
+      <label>الوزن بالكيلوغرام<input id="bmi-weight" type="number" min="20" max="400" inputmode="decimal" placeholder="70"></label>
+      <button class="primary" type="button" onclick="calcBMI()">احسب الآن</button>
+      <output id="bmi-result" class="tool-result" aria-live="polite"></output>
+    </div>
+  </div>
+  <div class="tool-card">
+    <span class="section-no">02 · احتياج الطاقة</span>
+    <h2>حاسبة السعرات اليومية</h2>
+    <p>تقدير تقريبي مبني على العمر والطول والوزن والجنس والنشاط، لا وصفة علاجية.</p>
+    <div class="tool-form">
+      <label>العمر<input id="cal-age" type="number" min="15" max="100" placeholder="30"></label>
+      <label>الجنس<select id="cal-sex"><option value="male">ذكر</option><option value="female">أنثى</option></select></label>
+      <label>الطول بالسنتيمتر<input id="cal-height" type="number" min="120" max="230" placeholder="175"></label>
+      <label>الوزن بالكيلوغرام<input id="cal-weight" type="number" min="30" max="300" placeholder="80"></label>
+      <label>النشاط<select id="cal-activity"><option value="1.2">قليل الحركة</option><option value="1.375">نشاط خفيف</option><option value="1.55">نشاط متوسط</option><option value="1.725">نشاط مرتفع</option><option value="1.9">نشاط مرتفع جداً</option></select></label>
+      <button class="primary" type="button" onclick="calcCalories()">قدّر احتياجك</button>
+      <output id="cal-result" class="tool-result" aria-live="polite"></output>
+    </div>
+  </div>
+</section>
+<section class="prose">
+  <h2>كيف نستخدم الحاسبات؟</h2>
+  <p>هذه النتائج تقديرية. مؤشر كتلة الجسم لا يفرّق بين كتلة العضلات والدهون، وحساب السعرات لا يلتقط كل الفروق الفردية. استخدم النتائج كنقطة بداية لفهم العادات، وليس كرقم إلزامي.</p>
+  <h2>مصادر مفيدة</h2>
+  <p><a href="https://www.niddk.nih.gov/health-information/weight-management/body-weight-planner" target="_blank" rel="noopener noreferrer">NIDDK: مخطط وزن الجسم ↗</a></p>
+  <p><a href="https://www.niddk.nih.gov/health-information/weight-management/adult-overweight-obesity" target="_blank" rel="noopener noreferrer">NIDDK: الوزن الصحي وإدارة الوزن ↗</a></p>
+</section>
+<script>
+function calcBMI(){
+  const h=Number(document.getElementById('bmi-height').value);
+  const w=Number(document.getElementById('bmi-weight').value);
+  const out=document.getElementById('bmi-result');
+  if(!(h>0&&w>0)){out.textContent='أدخل الطول والوزن.';return;}
+  const bmi=w/((h/100)*(h/100));
+  let label=bmi<18.5?'أقل من النطاق المرجعي للبالغين':bmi<25?'ضمن النطاق المرجعي للبالغين':bmi<30?'أعلى من النطاق المرجعي للبالغين':'30 أو أكثر';
+  out.textContent='BMI = '+bmi.toFixed(1)+' — '+label+'.';
+}
+function calcCalories(){
+  const age=Number(document.getElementById('cal-age').value);
+  const h=Number(document.getElementById('cal-height').value);
+  const w=Number(document.getElementById('cal-weight').value);
+  const sex=document.getElementById('cal-sex').value;
+  const act=Number(document.getElementById('cal-activity').value);
+  const out=document.getElementById('cal-result');
+  if(!(age>0&&h>0&&w>0)){out.textContent='أكمل البيانات أولاً.';return;}
+  const bmr=(10*w)+(6.25*h)-(5*age)+(sex==='male'?5:-161);
+  const tdee=Math.round(bmr*act);
+  out.textContent='التقدير التقريبي للمحافظة على الوزن: نحو '+tdee.toLocaleString('ar-JO')+' سعرة يومياً.';
+}
+</script>`;
+fs.writeFileSync(path.join(ROOT,'tools.html'),shell('الحاسبات الصحية | توازن','حاسبات صحية عربية لتقدير مؤشر كتلة الجسم واحتياج الطاقة، مع شرح للنتائج وحدودها.',toolsBody,BASE+'/tools.html'));
+
 const pages={
  'about.html':['عن توازن','منصة محتوى صحي عربي تضع الوضوح والمصادر والسياق قبل الوعود السريعة.',`<section class="page-hero"><span>عن توازن</span><h1>المعلومة الصحية<br>تستحق الهدوء.</h1><p>توازن موقع تثقيفي عربي يشرح موضوعات التغذية والحركة والنوم بلغة واضحة. لا نبيع حلولاً سحرية ولا نشخّص الحالات الطبية.</p></section><section class="prose"><h2>ما الذي نقدمه؟</h2><p>أدلة عملية تبدأ من المصادر الصحية الرسمية، وتوضح حدود المعلومة ومن يحتاج إلى استشارة مختص. نكتب للقارئ الذي يريد فهماً أفضل قبل اتخاذ قرار.</p><h2>من يكتب المحتوى؟</h2><p>يعد فريق التحرير المسودة ويقارن الادعاءات بالمصادر المذكورة في نهاية كل مقال. عند تناول إرشاد شخصي أو حالة مرضية، نوجّه القارئ إلى الطبيب أو اختصاصي التغذية المرخّص.</p><h2>تواصل</h2><p>سيضاف بريد التواصل الرسمي عند ربط النطاق.</p></section>`],
  'editorial.html':['السياسة التحريرية','كيف يختار توازن مصادره ويراجع محتواه الصحي ويصحح الأخطاء.',`<section class="page-hero"><span>السياسة التحريرية</span><h1>مصدر واضح.<br>ادعاء محسوب.</h1><p>نستخدم مصادر صحية رسمية وبحوثاً محكمة، ونميّز بين الإرشادات العامة والرعاية الفردية.</p></section><section class="prose"><h2>اختيار الموضوع</h2><p>نختار الأسئلة الشائعة التي يمكن شرحها بأمان، ونبتعد عن التشخيص والوصفات الدوائية الفردية. العناوين لا تعد بنتيجة مضمونة.</p><h2>المصادر والمراجعة</h2><p>تعتمد المقالات على جهات صحية رسمية مثل منظمة الصحة العالمية وNIDDK وCDC، وتعرض روابطها في نهاية المقال. نراجع المحتوى عند ظهور إرشادات جديدة، ونضع تاريخ المراجعة بوضوح.</p><h2>التصحيح</h2><p>إذا ظهر خطأ مؤثر، نصححه ونحدّث تاريخ المراجعة.</p><h2>الإعلانات والاستقلال</h2><p>قد يعرض الموقع إعلانات بواسطة Google AdSense بعد الموافقة. لا يغيّر المعلنون المحتوى، ولا نخلط الإعلان بالتوصية الصحية.</p></section>`],
@@ -71,7 +138,7 @@ const pages={
 for(const [file,[title,desc,body]] of Object.entries(pages))fs.writeFileSync(path.join(ROOT,file),shell(`${title} | توازن`,desc,body,`${BASE}/${file}`));
 fs.writeFileSync(path.join(ROOT,'ads.txt'),'google.com, pub-1304668609520202, DIRECT, f08c47fec0942fa0\n');
 fs.writeFileSync(path.join(ROOT,'robots.txt'),`User-agent: *\nAllow: /\nSitemap: ${BASE}/sitemap.xml\n`);
-const urls=['/','/library.html','/about.html','/editorial.html','/privacy.html','/disclaimer.html',...Object.keys(CATEGORIES).map(c=>`/topic-${c}.html`),...articles.map(a=>`/article-${a.slug}.html`)];
+const urls=['/','/library.html','/tools.html','/about.html','/editorial.html','/privacy.html','/disclaimer.html',...Object.keys(CATEGORIES).map(c=>`/topic-${c}.html`),...articles.map(a=>`/article-${a.slug}.html`)];
 const sitemapRows=urls.map(u=>{const match=articles.find(a=>u==='/article-'+a.slug+'.html');const lastmod=match?(match.date||'2026-09-22'):'2026-09-22';return `  <url><loc>${BASE}${u}</loc><lastmod>${lastmod}</lastmod></url>`;});
 fs.writeFileSync(path.join(ROOT,'sitemap.xml'),'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'+sitemapRows.join('\n')+'\n</urlset>\n');
 const rssItems=articles.map(a=>`<item><title>${esc(a.title)}</title><link>${BASE}/article-${a.slug}.html</link><guid>${BASE}/article-${a.slug}.html</guid><description>${esc(a.description)}</description><pubDate>${new Date((a.date||'2026-09-22')+'T08:00:00Z').toUTCString()}</pubDate></item>`).join('');
