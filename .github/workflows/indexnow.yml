@@ -9,6 +9,7 @@ on:
       - 'build_site.mjs'
       - 'index.html'
       - 'sitemap.xml'
+      - 'public/7c4a9d2e6f1b8c3a5d0e7f2b9a4c6d1e.txt'
   schedule:
     - cron: '37 */6 * * *'
 
@@ -24,7 +25,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Submit key discovery pages
-        continue-on-error: true
         run: |
           set -euo pipefail
           for path in \
@@ -40,5 +40,6 @@ jobs:
             /article-walking-after-meals.html; do
             url="${SITE}${path}"
             encoded=$(python -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$url")
-            curl --fail-with-body --retry 3 --max-time 20 "https://api.indexnow.org/indexnow?url=${encoded}&key=${KEY}"
+            status=$(curl -sS --retry 3 --max-time 20 -o /tmp/indexnow-response -w '%{http_code}' "https://api.indexnow.org/indexnow?url=${encoded}&key=${KEY}")
+            case "$status" in 200|202) echo "IndexNow ${path} -> HTTP ${status}" ;; *) echo "IndexNow ${path} -> HTTP ${status}"; cat /tmp/indexnow-response; exit 1 ;; esac
           done
