@@ -162,7 +162,7 @@ const urls=['/','/library.html','/tools.html','/tools-calories.html','/tools-bmi
 const sitemapRows=urls.map(u=>{const match=articles.find(a=>u==='/article-'+a.slug+'.html');const lastmod=match?(match.date||'2026-09-22'):'2026-09-22';return `  <url><loc>${BASE}${u}</loc><lastmod>${lastmod}</lastmod></url>`;});
 fs.writeFileSync(path.join(ROOT,'sitemap.xml'),'<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'+sitemapRows.join('\n')+'\n</urlset>\n');
 const rssItems=articles.map(a=>`<item><title>${esc(a.title)}</title><link>${BASE}/article-${a.slug}.html</link><guid>${BASE}/article-${a.slug}.html</guid><description>${esc(a.description)}</description><pubDate>${new Date((a.date||'2026-09-22')+'T08:00:00Z').toUTCString()}</pubDate></item>`).join('');
-fs.writeFileSync(path.join(ROOT,'feed.xml'),`<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>توازن</title><link>${BASE}/</link><description>مقالات عربية موثوقة عن التغذية والحركة والنوم.</description><language>ar</language>${rssItems}</channel></rss>`);
+fs.writeFileSync(path.join(ROOT,'feed.xml'),`<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>توازن</title><link>${BASE}/</link><atom:link rel="self" href="${BASE}/feed.xml" type="application/rss+xml"/><atom:link rel="hub" href="https://pubsubhubbub.appspot.com/"/><description>مقالات عربية موثوقة عن التغذية والحركة والنوم.</description><language>ar</language>${rssItems}</channel></rss>`);
 console.log(`Built ${urls.length} indexable pages in ${ROOT}`);
 const output=path.join(ROOT,'dist');
 fs.mkdirSync(output,{recursive:true});
