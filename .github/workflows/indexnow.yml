@@ -19,37 +19,61 @@ permissions:
 env:
   SITE: https://tawazon-health.vercel.app
   KEY: 7c4a9d2e6f1b8c3a5d0e7f2b9a4c6d1e
+  KEY_LOCATION: https://tawazon-health.vercel.app/7c4a9d2e6f1b8c3a5d0e7f2b9a4c6d1e.txt
 
 jobs:
   submit:
     runs-on: ubuntu-latest
     steps:
-      - name: Submit key discovery pages
+      - name: Submit every sitemap URL to IndexNow
         run: |
           set -euo pipefail
-          for path in \
-            / \
-            /sitemap.xml \
-            /library.html \
-            /tools.html \
-            /article-healthy-weight-loss.html \
-            /article-calories-guide.html \
-            /article-belly-fat.html \
-            /article-protein-basics.html \
-            /article-better-sleep.html \
-            /article-walking-after-meals.html; do
-            url="${SITE}${path}"
-            encoded=$(python -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$url")
-            status=$(curl -sS --retry 3 --max-time 20 -o /tmp/indexnow-response -w '%{http_code}' "https://api.indexnow.org/indexnow?url=${encoded}&key=${KEY}")
-            case "$status" in 200|202) echo "IndexNow ${path} -> HTTP ${status}" ;; *) echo "IndexNow ${path} -> HTTP ${status}"; cat /tmp/indexnow-response; exit 1 ;; esac
-          done
+          python - <<'PY'
+          import json, urllib.request, urllib.parse, xml.etree.ElementTree as ET
 
-      - name: Publish Tawazon feed to WebSub
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          curl --fail-with-body --max-time 20 -X POST \
-            -H 'Content-Type: application/x-www-form-urlencoded' \
-            --data-urlencode 'hub.mode=publish' \
-            --data-urlencode "hub.url=${SITE}/feed.xml" \
-            https://pubsubhubbub.appspot.com/
+          site = "https://tawazon-health.vercel.app"
+          key = "7c4a9d2e6f1b8c3a5d0e7f2b9a4c6d1e"
+          key_location = "https://tawazon-health.vercel.app/7c4a9d2e6f1b8c3a5d0e7f2b9a4c6d1e.txt"
+
+          with urllib.request.urlopen(site + "/sitemap.xml", timeout=30) as r:
+              xml = r.read()
+
+          root = ET.fromstring(xml)
+          ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+          locs = [el.text.strip() for el in root.findall(".//sm:loc", ns) if el.text and el.text.strip()]
+          if not locs:
+              raise SystemExit("Sitemap contained no <loc> URLs")
+
+          for start in range(0, len(locs), 10000):
+              batch = locs[start:start + 10000]
+              payload = json.dumps({
+                  "host": "tawazon-health.vercel.app",
+                  "key": key,
+                  "keyLocation": key_location,
+                  "urlList": batch,
+              }).encode()
+              req = urllib.request.Request(
+                  "https://api.indexnow.org/indexnow",
+                  data=payload,
+                  headers={"Content-Type": "application/json; charset=utf-8"},
+                  method="POST",
+              )
+              with urllib.request.urlopen(req, timeout=60) as resp:
+                  status = resp.status
+              if status not in (200, 202):
+                  raise SystemExit(f"IndexNow batch failed: HTTP {status}")
+              print(f"IndexNow submitted {len(batch)} URLs from sitemap")
+
+          print("Publishing feed update to WebSub")
+          payload = "hub.mode=publish&hub.url=" + urllib.parse.quote(site + "/feed.xml", safe="")
+          req = urllib.request.Request(
+              "https://pubsubhubbub.appspot.com/",
+              data=payload.encode(),
+              headers={"Content-Type": "application/x-www-form-urlencoded"},
+              method="POST",
+          )
+          with urllib.request.urlopen(req, timeout=30) as resp:
+              if resp.status < 200 or resp.status >= 300:
+                  raise SystemExit(f"WebSub publish failed: HTTP {resp.status}")
+              print(f"WebSub publish -> HTTP {resp.status}")
+          PY
