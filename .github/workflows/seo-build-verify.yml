@@ -1,0 +1,19 @@
+name: SEO Build Verify
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm install --no-audit --no-fund
+      - run: node --check scripts/seo-audit.mjs
+      - run: npm run build
