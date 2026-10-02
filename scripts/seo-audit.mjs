@@ -77,10 +77,27 @@ for(const file of files){
     const og=meta(html,'og:url');if(og&&og!==c)warnings.push(rel+': og:url differs from canonical');
   }
   jsonLdCheck(html,rel);
+  validateStructuredData(html,rel);
   const bytes=Buffer.byteLength(html,'utf8');if(bytes>500000)warnings.push(rel+': HTML >500KB ('+bytes+')');
   for(const href of localLinks(html)){
     const target=targetFor(href);
     if(target&&!fs.existsSync(target)&&!href.startsWith('/api/'))errors.push(rel+': broken internal link '+href);
+  }
+}
+
+
+function validateStructuredData(html,rel){
+  for(const m of html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)){
+    let data;try{data=JSON.parse(m[1]);}catch(e){continue;}
+    const nodes=Array.isArray(data)?data:(data&&Array.isArray(data['@graph'])?data['@graph']:[data]);
+    for(const node of nodes){
+      if(!node||typeof node!=='object')continue;
+      const types=Array.isArray(node['@type'])?node['@type']:[node['@type']].filter(Boolean);
+      if(types.includes('BreadcrumbList')&&!Array.isArray(node.itemListElement)) errors.push(rel+': BreadcrumbList missing itemListElement');
+      if(types.includes('Article')&&!node.headline) errors.push(rel+': Article missing headline');
+      if(types.includes('WebSite')&&(!node.name||!node.url)) errors.push(rel+': WebSite missing name/url');
+      if(types.includes('WebApplication')&&(!node.name||!node.url)) errors.push(rel+': WebApplication missing name/url');
+    }
   }
 }
 
