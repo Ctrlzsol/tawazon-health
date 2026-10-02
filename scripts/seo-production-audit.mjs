@@ -48,6 +48,32 @@ function internal(html){
 function sitemapUrls(xml){
   return [...xml.split('<loc>').slice(1)].map(x=>x.split('</loc>')[0].trim()).filter(Boolean);
 }
+
+function validateStructuredData(html,url){
+  for(const m of html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)){
+    let data;try{data=JSON.parse(m[1]);}catch{continue;}
+    const nodes=Array.isArray(data)?data:(data&&Array.isArray(data['@graph'])?data['@graph']:[data]);
+    for(const node of nodes){
+      if(!node||typeof node!=='object')continue;
+      const types=Array.isArray(node['@type'])?node['@type']:[node['@type']].filter(Boolean);
+      if(types.includes('Article')&&!node.headline)critical.push('Article JSON-LD missing headline '+url);
+      if(types.includes('BreadcrumbList')&&!Array.isArray(node.itemListElement))critical.push('BreadcrumbList JSON-LD missing itemListElement '+url);
+      if(types.includes('WebSite')&&(!node.name||!node.url))critical.push('WebSite JSON-LD missing name/url '+url);
+      if(types.includes('WebApplication')&&(!node.name||!node.url))critical.push('WebApplication JSON-LD missing name/url '+url);
+    }
+  }
+}
+async function queryVariantProbe(url){
+  const clean=url.split('?')[0].split('#')[0];
+  try{
+    const result=await get(clean+'?utm_source=seo-audit');
+    if(result.response.status===200){
+      const c=canonical(result.body);
+      if(c&&new URL(c,clean).href!==new URL(clean).href)critical.push('Query variant canonical mismatch '+clean+' -> '+c);
+    }
+  }catch(e){warnings.push('Query variant probe failed '+clean+' '+e);}
+}
+
 async function main(){
   const sm=await get(SITE+'/sitemap.xml');
   if(sm.response.status!==200)critical.push('sitemap status '+sm.response.status);
