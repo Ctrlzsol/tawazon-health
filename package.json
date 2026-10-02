@@ -8,6 +8,7 @@
     "check": "node validate.mjs",
     "seo:audit": "node scripts/seo-audit.mjs",
     "seo:production-audit": "node scripts/seo-production-audit.mjs",
-    "seo:gsc-manifest": "node scripts/gsc-validation-manifest.mjs https://tawazon-health.vercel.app/sitemap.xml gsc-validation-manifest.json"
+    "seo:gsc-manifest": "node scripts/gsc-validation-manifest.mjs https://tawazon-health.vercel.app/sitemap.xml gsc-validation-manifest.json",
+    "seo:live-audit": "node scripts/seo-live-audit.mjs"
   }
 }
