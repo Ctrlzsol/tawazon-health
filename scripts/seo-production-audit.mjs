@@ -134,6 +134,39 @@ async function main(){
     if(![404,410].includes(r.response.status))critical.push('unknown route not 404/410 '+url+' -> '+r.response.status);
   }
 
+  const configFile=path.resolve('vercel.json');
+  if(fs.existsSync(configFile)){
+    try{
+      const config=JSON.parse(fs.readFileSync(configFile,'utf8'));
+      for(const rule of (config.redirects||[])){
+        const source=String(rule.source||'');
+        if(!source)continue;
+        let sample=source.replace(/:path\\*/g,'seo-probe').replace(/:[A-Za-z0-9_]+/g,'seo-sample');
+        const target=new URL(sample,SITE).href;
+        try{
+          const result=await get(target);
+          const expectedPermanent=rule.permanent!==false;
+          const allowed=expectedPermanent?[301,308].includes(result.response.status):[302,307].includes(result.response.status);
+          if(!allowed)critical.push('redirect rule '+source+' expected '+(expectedPermanent?'301/308':'302/307')+' got '+result.response.status);
+          const location=result.response.headers.get('location');
+          if(!location)critical.push('redirect rule '+source+' missing Location');
+          else{
+            const destination=new URL(location,target).href;
+            const destinationResult=await get(destination);
+            if(destinationResult.response.status>=300&&destinationResult.response.status<400)critical.push('redirect chain '+source+' -> '+location);
+            if([404,410].includes(destinationResult.response.status))critical.push('redirect target '+destination+' is '+destinationResult.response.status);
+          }
+        }catch(e){warnings.push('redirect probe failed '+source+' '+e);}
+      }
+    }catch(e){critical.push('invalid vercel.json '+e.message);}
+  }
+
+  const httpOrigin='http://'+new URL(SITE).host+'/';
+  try{
+    const httpResult=await get(httpOrigin);
+    if(![301,302,307,308].includes(httpResult.response.status))warnings.push('HTTP origin does not redirect to HTTPS: '+httpResult.response.status);
+  }catch(e){warnings.push('HTTP->HTTPS probe failed '+e);}
+
   const indexProbe=await get(SITE+'/index.html');
   if([301,308].includes(indexProbe.response.status)){
     if(!indexProbe.response.headers.get('location'))warnings.push('/index.html redirects without Location');
