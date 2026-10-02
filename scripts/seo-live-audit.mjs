@@ -88,7 +88,7 @@ function normalizeUrl(url){
 
 const robotsRes=await request(SITE+'/robots.txt');
 if(robotsRes.status!==200)errors.push('robots.txt returned '+robotsRes.status);
-if(!/Sitemap:\s*https://tawazon-health\\.vercel\\.app\/sitemap\\.xml/i.test(robotsRes.body))errors.push('robots.txt is missing canonical sitemap directive');
+if(!robotsRes.body.toLowerCase().includes('sitemap: https://tawazon-health.vercel.app/sitemap.xml'.toLowerCase()))errors.push('robots.txt is missing canonical sitemap directive');
 report.robots={status:robotsRes.status,contentType:robotsRes.contentType};
 const sitemapRes=await request(SITE+'/sitemap.xml');
 if(sitemapRes.status!==200)errors.push('sitemap.xml returned '+sitemapRes.status);
