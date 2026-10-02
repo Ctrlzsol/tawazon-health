@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT=path.dirname(fileURLToPath(import.meta.url));
 const articles=JSON.parse(fs.readFileSync(path.join(ROOT,'content.json'),'utf8'));
-const BASE='https://tawazon-health.vercel.app';
+const BASE=process.env.SITE_URL || 'https://tawazon-health.vercel.app';
 const PUBLISHER='ca-pub-1304668609520202';
 const CATEGORIES={
  nutrition:{name:'التغذية',icon:'🥗',desc:'الغذاء المتوازن، المكونات والملصقات'},
