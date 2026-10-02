@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "node build_site.mjs && node scripts/generate-sitemap.mjs",
-    "check": "node validate.mjs"
+    "check": "node validate.mjs",
+    "seo:audit": "node scripts/seo-audit.mjs"
   }
 }
