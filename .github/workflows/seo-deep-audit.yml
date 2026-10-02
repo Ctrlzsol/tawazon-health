@@ -1,0 +1,19 @@
+name: SEO Deep Audit
+on:
+  pull_request:
+    branches: [main]
+  push:
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SEO_SITE_URL: https://tawazon-health.vercel.app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - run: npm run seo:deep-audit
