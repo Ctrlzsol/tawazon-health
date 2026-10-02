@@ -30,8 +30,9 @@ function attr(tag,name){
   if(p2>=0){const s=p2+target2.length,e=tag.indexOf("'",s);if(e>=0)return tag.slice(s,e);}
   return '';
 }
+function tags(html,name){ return getTags(html,name); }
 function metaValue(html,attribute,value){
-  for(const t of tags(html,'meta')){
+  for(const t of getTags(html,'meta'){
     if(attr(t,attribute).toLowerCase()===value.toLowerCase()) return attr(t,'content').trim();
   }
   return '';
