@@ -29,7 +29,8 @@ async function request(url,method='GET'){
 }
 function attrs(tag){
   const out={};
-  for(const match of tag.matchAll(/([:\\w-]+)\\s*=\\s*["']([^"']*)["']/g))out[match[1].toLowerCase()]=match[2];
+  const pattern=/([\\w:-]+)\\s*=\\s*["']([^"']*)["']/g;
+  for(const match of tag.matchAll(pattern))out[match[1].toLowerCase()]=match[2];
   return out;
 }
 function meta(html,name){
@@ -44,16 +45,16 @@ function canonical(html){
   for(const part of html.split('<link').slice(1)){
     const tag='<link'+part.split('>')[0]+'>';
     const a=attrs(tag);
-    if((a.rel||'').toLowerCase().split(/\\s+/).includes('canonical'))return a.href||'';
+    if((a.rel||'').toLowerCase().split(/\s+/).includes('canonical'))return a.href||'';
   }
   return '';
 }
-function title(html){return html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i)?.[1]?.trim()||'';}
-function h1Count(html){return (html.match(/<h1(?:\\s|>)/gi)||[]).length;}
+function title(html){return html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.trim()||'';}
+function h1Count(html){return (html.match(/<h1(?:\s|>)/gi)||[]).length;}
 function jsonLd(html){
   const out=[];
-  for(const m of html.matchAll(/<script[^>]+type=["']application\\/ld\\+json["'][^>]*>([\\s\\S]*?)<\\/script>/gi)){
-    try{out.push(JSON.parse(m[1]));}catch(e){errors.push('invalid JSON-LD at '+m[0].slice(0,80)+': '+e.message);}
+  for(const m of html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)){
+    try{out.push(JSON.parse(m[1]));}catch(e){errors.push('invalid JSON-LD: '+e.message);}
   }
   return out;
 }
@@ -108,10 +109,11 @@ for(let i=0;i<requestQueue.length;i++){
   if(res.status>=300&&res.status<400)errors.push('sitemap/page URL redirects: '+url+' -> '+res.location);
   if(res.status!==200)errors.push('page returned '+res.status+': '+url);
   if(res.elapsedMs>2500)warnings.push('slow response '+res.elapsedMs+'ms: '+url);
-  if(/(\\/study\\/|\\/guides\\/|\\/blog\\/|\\/article-)/.test(new URL(url).pathname)&&page.textChars<800)warnings.push('thin live content (<800 chars): '+url);
+
   if(res.contentLength>500000)warnings.push('HTML >500KB: '+url+' ('+res.contentLength+')');
   if(res.status===200&&/text\\/html/i.test(res.contentType)){
     page.title=title(res.body);page.canonical=canonical(res.body);page.metaRobots=meta(res.body,'robots');page.h1=h1Count(res.body);const bodyText=res.body.replace(/<script[\\s\\S]*?<\\/script>/gi,' ').replace(/<style[\\s\\S]*?<\\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/\\s+/g,' ').trim();page.textChars=bodyText.length;
+    if(/(\/study\/|\/guides\/|\/blog\/|\/article-)/.test(new URL(url).pathname)&&page.textChars<800)warnings.push('thin live content (<800 chars): '+url);
     if(!page.title)errors.push('missing title: '+url);
     if(!meta(res.body,'description'))errors.push('missing meta description: '+url);
     if(!page.canonical)errors.push('missing canonical: '+url);
