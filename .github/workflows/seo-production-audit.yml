@@ -17,4 +17,17 @@ jobs:
         with:
           node-version: '24'
       - run: node --check scripts/seo-production-audit.mjs
-      - run: node scripts/seo-production-audit.mjs
+      - run: node scripts/seo-production-audit.mjs > seo-production-audit-report.json
+      - run: node scripts/gsc-validation-manifest.mjs dist/sitemap.xml gsc-validation-manifest.json
+      - name: Upload GSC validation manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gsc-validation-manifest
+          path: gsc-validation-manifest.json
+      - name: Upload SEO audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seo-production-audit-report
+          path: seo-production-audit-report.json
