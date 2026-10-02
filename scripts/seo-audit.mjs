@@ -30,9 +30,16 @@ function attr(tag,name){
   if(p2>=0){const s=p2+target2.length,e=tag.indexOf("'",s);if(e>=0)return tag.slice(s,e);}
   return '';
 }
-function meta(html,name){
-  for(const t of getTags(html,'meta'))if(attr(t,'name').toLowerCase()===name.toLowerCase())return attr(t,'content').trim();
+function metaValue(html,attribute,value){
+  for(const t of tags(html,'meta')){
+    if(attr(t,attribute).toLowerCase()===value.toLowerCase()) return attr(t,'content').trim();
+  }
   return '';
+}
+function meta(html,name){ return metaValue(html,'name',name); }
+function metaProperty(html,property){
+  const value=metaValue(html,'property',property);
+  return value || metaValue(html,'name',property);
 }
 function canonical(html){
   for(const t of getTags(html,'link'))if(attr(t,'rel').toLowerCase().split(/\s+/).includes('canonical'))return attr(t,'href').trim();
