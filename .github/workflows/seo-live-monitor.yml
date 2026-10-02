@@ -11,7 +11,8 @@ jobs:
       SEO_SITE_URL: https://tawazon-health.vercel.app
       SEO_LIVE_MAX_URLS: '500'
       SEO_LIVE_CONCURRENCY: '6'
-      SEO_NEGATIVE_PATHS: '/definitely-not-a-real-route-20261003'
+      SEO_NEGATIVE_PATHS: '/article-not-real-20261003.html,/definitely-not-a-real-route-20261003'
+      SEO_PRIVATE_PATHS: ''
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
