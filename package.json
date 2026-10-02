@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node build_site.mjs",
+    "build": "node build_site.mjs && node scripts/generate-sitemap.mjs",
     "check": "node validate.mjs"
   }
 }
