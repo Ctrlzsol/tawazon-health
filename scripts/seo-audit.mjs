@@ -8,32 +8,29 @@ const canonicals=new Map();
 
 function walk(dir){
   if(!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir,{withFileTypes:true}).flatMap(entry=>{
+  return fs.readdirSync(dir,{withFileTypes:true}).flatMap(function(entry){
     const full=path.join(dir,entry.name);
     if(entry.name.startsWith('.')||entry.name==='node_modules') return [];
     return entry.isDirectory()?walk(full):[full];
   });
 }
-
 function attr(tag,name){
-  const prefixes=[name+'="',name+"='"];
-  for(const prefix of prefixes){
-    const start=tag.toLowerCase().indexOf(prefix.toLowerCase());
+  const forms=[name+'="',name+"='"];
+  for(const form of forms){
+    const start=tag.toLowerCase().indexOf(form.toLowerCase());
     if(start<0) continue;
-    const valueStart=start+prefix.length;
-    const quote=prefix.endsWith('"')?'"':"'";
-    const end=tag.indexOf(quote,valueStart);
-    if(end>=0) return tag.slice(valueStart,end);
+    const quote=form.charAt(form.length-1);
+    const from=start+form.length;
+    const end=tag.indexOf(quote,from);
+    if(end>=0) return tag.slice(from,end);
   }
   return '';
 }
-
-function tags(html,tagName){
+function getTags(html,prefix){
   const out=[];
   const lower=html.toLowerCase();
-  const needle='<'+tagName.toLowerCase();
   let pos=0;
-  while((pos=lower.indexOf(needle,pos))>=0){
+  while((pos=lower.indexOf('<'+prefix,pos))>=0){
     const end=html.indexOf('>',pos);
     if(end<0) break;
     out.push(html.slice(pos,end+1));
@@ -41,36 +38,37 @@ function tags(html,tagName){
   }
   return out;
 }
-
 function meta(html,name){
-  for(const tag of tags(html,'meta')){
+  for(const tag of getTags(html,'meta')){
     if(attr(tag,'name').toLowerCase()===name.toLowerCase()) return attr(tag,'content').trim();
   }
   return '';
 }
-
-function canonical(html){
-  for(const tag of tags(html,'link')){
-    if(attr(tag,'rel').toLowerCase().split(/\s+/).includes('canonical')) return attr(tag,'href').trim();
-  }
-  return '';
-}
-
 function title(html){
   const lower=html.toLowerCase();
   const start=lower.indexOf('<title');
   if(start<0) return '';
   const openEnd=html.indexOf('>',start);
   const close=lower.indexOf('</title>',openEnd);
-  if(openEnd<0||close<0) return '';
-  return html.slice(openEnd+1,close).trim();
+  return openEnd>=0&&close>openEnd?html.slice(openEnd+1,close).trim():'';
 }
-
+function canonical(html){
+  for(const tag of getTags(html,'link')){
+    if(attr(tag,'rel').toLowerCase().split(/ +/).includes('canonical')) return attr(tag,'href').trim();
+  }
+  return '';
+}
 function noindex(html){
   return meta(html,'robots').toLowerCase().includes('noindex');
 }
+function skip(file){
+  const rel=path.relative(ROOT,file).replaceAll(path.sep,'/');
+  if(rel==='404.html') return true;
+  
+  return false;
+}
 
-const files=walk(ROOT).filter(file=>file.endsWith('.html'));
+const files=walk(ROOT).filter(function(file){return file.endsWith('.html')&&!skip(file);});
 for(const file of files){
   const html=fs.readFileSync(file,'utf8');
   if(noindex(html)) continue;
@@ -109,12 +107,11 @@ if(fs.existsSync(sitemapPath)){
   }
 }
 
-const fourOhFour=path.join(ROOT,'404.html');
-if(fs.existsSync(fourOhFour) && !noindex(fs.readFileSync(fourOhFour,'utf8'))) errors.push('404.html must be noindex');
+const notFound=path.join(ROOT,'404.html');
+if(fs.existsSync(notFound) && !noindex(fs.readFileSync(notFound,'utf8'))) errors.push('404.html must be noindex');
 
 if(errors.length){
   console.error(errors.join('\n'));
   process.exit(1);
 }
-
-console.log('SEO audit passed: '+files.length+' HTML files, '+canonicals.size+' indexable canonical URLs.');
+console.log('SEO audit passed: '+files.length+' public HTML files, '+canonicals.size+' unique indexable canonicals.');
