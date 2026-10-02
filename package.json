@@ -10,6 +10,6 @@
     "seo:production-audit": "node scripts/seo-production-audit.mjs",
     "seo:gsc-manifest": "node scripts/generate-gsc-manifest.mjs",
     "seo:live-audit": "node scripts/seo-live-audit.mjs",
-    "seo:verify": "npm run build && npm run seo:audit && npm run check"
+    "seo:verify": "npm run build && npm run seo:audit && npm run check && node --check scripts/seo-audit.mjs && node --check scripts/seo-live-audit.mjs && node --check scripts/generate-gsc-manifest.mjs"
   }
 }
