@@ -18,7 +18,7 @@ jobs:
           node-version: '24'
       - run: node --check scripts/seo-production-audit.mjs
       - run: node scripts/seo-production-audit.mjs > seo-production-audit-report.json
-      - run: node scripts/gsc-validation-manifest.mjs dist/sitemap.xml gsc-validation-manifest.json
+      - run: node scripts/gsc-validation-manifest.mjs https://tawazon-health.vercel.app/sitemap.xml gsc-validation-manifest.json
       - name: Upload GSC validation manifest
         if: always()
         uses: actions/upload-artifact@v4
