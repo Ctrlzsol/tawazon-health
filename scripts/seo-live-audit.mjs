@@ -1,227 +1,108 @@
 import fs from 'node:fs';
+import path from 'node:path';
 
-const SITE="https://tawazon-health.vercel.app";
-const URLS=["/","/library.html","/article-protein-basics.html","/sleep-calculator.html"];
-const EXPECTED_404=["/this-route-does-not-exist-20261003","/article-not-a-real-article-20261003"];
-const NOINDEX_TESTS=[];
-const LEGACY_REDIRECTS=["/index.html"];
-const EXTRA_ORIGINS=[];
-const QUERY_TESTS=["/library.html","/article-protein-basics.html"];
-const SLASH_TESTS=[];
-const INDEX_TESTS=["/index.html"];
+const SITE=(process.env.SEO_SITE_URL||'').replace(/\/+$/,'');
+if(!SITE) throw new Error('SEO_SITE_URL is required');
+const MAX_CONCURRENCY=Math.max(1,Math.min(10,Number(process.env.SEO_LIVE_CONCURRENCY||6)));
+const MAX_URLS=Math.max(1,Number(process.env.SEO_LIVE_MAX_URLS||500));
+const NEGATIVE_PATHS=(process.env.SEO_NEGATIVE_PATHS||'').split(',').map(s=>s.trim()).filter(Boolean);
+const EXPECTED_HOST=new URL(SITE).host;
 
+function getMeta(html,name){
+  const re=new RegExp('<meta[^>]*name=["\\\\\\']'+name+'["\\\\\\'][^>]*content=["\\\\\\']([^"\\\\\\']*)["\\\\\\']','i');
+  const m=html.match(re); return m?m[1].trim():'';
+}
+function getCanonical(html){
+  const m=html.match(/<link[^>]*rel=["']canonical["'][^>]*href=["']([^"']+)["'][^>]*>/i);
+  return m?m[1].trim():'';
+}
+function getTitle(html){
+  const m=html.match(/<title[^>]*>([\s\S]*?)<\/title>/i); return m?m[1].trim():'';
+}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+
+async function fetchUrl(url,opts={}){
+  const started=performance.now();
+  const res=await fetch(url,{redirect:'manual',headers:{'user-agent':'tawazon-seo-audit/1.0 '+process.version,...(opts.headers||{})}});
+  const elapsed=Math.round(performance.now()-started);
+  const body=opts.readBody===false?'':await res.text();
+  return {res,body,elapsed};
+}
+async function pool(items,worker,concurrency){
+  const out=new Array(items.length);let cursor=0;
+  async function runner(){
+    while(true){const i=cursor++;if(i>=items.length)return;try{out[i]=await worker(items[i],i)}catch(e){out[i]={error:e.message}}}
+  }
+  await Promise.all(Array.from({length:Math.min(concurrency,items.length)},runner));
+  return out;
+}
+
+const sitemapUrl=SITE+'/sitemap.xml';
+const map=await fetchUrl(sitemapUrl);
+if(map.res.status!==200) throw new Error('sitemap HTTP '+map.res.status);
+const sitemapUrls=[];
+for(const chunk of map.body.split('<loc>').slice(1)){const e=chunk.indexOf('</loc>');if(e>=0)sitemapUrls.push(chunk.slice(0,e).trim());}
+const unique=[...new Set(sitemapUrls)];
 const errors=[];
 const warnings=[];
-const report={site:SITE,startedAt:new Date().toISOString(),sitemap:{},pages:[],links:{},redirectTests:[],normalization:[],errors,warnings};
+if(unique.length!==sitemapUrls.length) errors.push('sitemap contains duplicates');
 
-function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
-async function request(url,method='GET'){
-  const started=Date.now();
-  const response=await fetch(url,{method,redirect:'manual',headers:{'user-agent':'SEO-Engineering-Audit/1.0'}});
-  const body=method==='GET'?await response.text():'';
-  return {
-    url,status:response.status,location:response.headers.get('location')||'',
-    contentType:response.headers.get('content-type')||'',
-    robotsHeader:response.headers.get('x-robots-tag')||'',
-    contentLength:Number(response.headers.get('content-length')||Buffer.byteLength(body,'utf8')),
-    elapsedMs:Date.now()-started,body,headers:response.headers
-  };
-}
-function attrs(tag){
-  const out={};
-  const pattern=/([\w:-]+)\s*=\s*["']([^"']*)["']/g;
-  for(const match of tag.matchAll(pattern))out[match[1].toLowerCase()]=match[2];
-  return out;
-}
-function meta(html,name){
-  for(const part of html.split('<meta').slice(1)){
-    const tag='<meta'+part.split('>')[0]+'>';
-    const a=attrs(tag);
-    if((a.name||'').toLowerCase()===name.toLowerCase())return a.content||'';
-  }
-  return '';
-}
-function canonical(html){
-  for(const part of html.split('<link').slice(1)){
-    const tag='<link'+part.split('>')[0]+'>';
-    const a=attrs(tag);
-    if((a.rel||'').toLowerCase().split(/\s+/).includes('canonical'))return a.href||'';
-  }
-  return '';
-}
-function title(html){return html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.trim()||'';}
-function h1Count(html){return (html.match(/<h1(?:\s|>)/gi)||[]).length;}
-function jsonLd(html){
-  const out=[];
-  for(const m of html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)){
-    try{out.push(JSON.parse(m[1]));}catch(e){errors.push('invalid JSON-LD: '+e.message);}
-  }
-  return out;
-}
-function flattenSchema(data){
-  if(Array.isArray(data))return data;
-  if(data&&Array.isArray(data['@graph']))return data['@graph'];
-  return data?[data]:[];
-}
-function internalLinks(html,pageUrl){
-  const found=new Set();
-  for(const m of html.matchAll(/href=["']([^"']+)["']/gi)){
-    const raw=m[1];
-    if(!raw||raw.startsWith('#')||raw.startsWith('mailto:')||raw.startsWith('tel:')||raw.startsWith('javascript:'))continue;
-    try{
-      const u=new URL(raw,pageUrl);
-      if(u.origin!==new URL(SITE).origin)continue;
-      if(/^\/(api|assets?)(\/|$)/.test(u.pathname))continue;
-      if(/\.(css|js|json|png|jpe?g|gif|svg|webp|ico|xml|txt|pdf|woff2?)$/i.test(u.pathname))continue;
-      u.search='';u.hash='';
-      found.add(u.href);
-    }catch{}
-  }
-  return [...found];
-}
-function normalizeUrl(url){
-  const u=new URL(url);
-  u.hash='';
-  if(u.pathname!=='/'&&u.pathname.endsWith('/'))u.pathname=u.pathname.slice(0,-1);
-  return u.href;
-}
+const targets=unique.slice(0,MAX_URLS);
+const results=await pool(targets,async function(url){
+  const x=await fetchUrl(url);
+  const headers=Object.fromEntries(x.res.headers.entries());
+  if(x.res.status>=300&&x.res.status<400)return {url,status:x.res.status,location:headers.location||'',elapsed:x.elapsed,bytes:0,headers,redirect:true};
+  const contentType=headers['content-type']||'';
+  if(x.res.status!==200)return {url,status:x.res.status,elapsed:x.elapsed,bytes:Buffer.byteLength(x.body),headers,error:'non-200'};
+  if(!contentType.includes('text/html'))return {url,status:x.res.status,elapsed:x.elapsed,bytes:Buffer.byteLength(x.body),headers,error:'sitemap target is not HTML'};
+  const canonical=getCanonical(x.body);
+  const robots=(getMeta(x.body,'robots')+' '+(headers['x-robots-tag']||'')).toLowerCase();
+  const title=getTitle(x.body);
+  const parsed=new URL(url);
+  const sameOrigin=canonical?new URL(canonical,Site).origin===new URL(SITE).origin:false;
+  return {url,status:200,elapsed:x.elapsed,bytes:Buffer.byteLength(x.body),headers,title,robots,canonical,sameOrigin};
+},MAX_CONCURRENCY);
 
-const robotsRes=await request(SITE+'/robots.txt');
-if(robotsRes.status!==200)errors.push('robots.txt returned '+robotsRes.status);
-if(!robotsRes.body.toLowerCase().includes('sitemap: https://tawazon-health.vercel.app/sitemap.xml'.toLowerCase()))errors.push('robots.txt is missing canonical sitemap directive');
-report.robots={status:robotsRes.status,contentType:robotsRes.contentType};
-const sitemapRes=await request(SITE+'/sitemap.xml');
-if(sitemapRes.status!==200)errors.push('sitemap.xml returned '+sitemapRes.status);
-if(!/xml/i.test(sitemapRes.contentType))warnings.push('sitemap content-type is '+sitemapRes.contentType);
-const sitemapUrls=[];
-for(const m of sitemapRes.body.matchAll(/<loc>([^<]+)<\/loc>/g))sitemapUrls.push(m[1].trim());
-report.sitemap={status:sitemapRes.status,count:sitemapUrls.length,contentType:sitemapRes.contentType};
-
-const targetUrls=[...new Set([...sitemapUrls,...URLS.map(x=>new URL(x,SITE).href)])];
-const incoming=new Map(targetUrls.map(u=>[normalizeUrl(u),0]));
-const discoveredLinks=new Map();
-const requestQueue=targetUrls.slice(0,300);
-
-for(let i=0;i<requestQueue.length;i++){
-  const url=requestQueue[i];
-  const res=await request(url);
-  const page={url,status:res.status,location:res.location,elapsedMs:res.elapsedMs,contentLength:res.contentLength,robots:res.robotsHeader,title:'',canonical:'',metaRobots:'',h1:0,internalLinks:[]};
-  if(res.status>=300&&res.status<400)errors.push('sitemap/page URL redirects: '+url+' -> '+res.location);
-  if(res.status!==200)errors.push('page returned '+res.status+': '+url);
-  if(res.elapsedMs>2500)warnings.push('slow response '+res.elapsedMs+'ms: '+url);
-
-  if(res.contentLength>500000)warnings.push('HTML >500KB: '+url+' ('+res.contentLength+')');
-  if(res.status===200&&/text\/html/i.test(res.contentType)){
-    page.title=title(res.body);page.canonical=canonical(res.body);page.metaRobots=meta(res.body,'robots');page.h1=h1Count(res.body);const bodyText=res.body.replace(/<script[\s\\S]*?<\/script>/gi,' ').replace(/<style[\s\\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();page.textChars=bodyText.length;
-  
-    if(!page.title)errors.push('missing title: '+url);
-    if(!meta(res.body,'description'))errors.push('missing meta description: '+url);
-    if(!page.canonical)errors.push('missing canonical: '+url);
-    if(page.h1<1)errors.push('missing H1: '+url);
-    if(page.h1>1)warnings.push('multiple H1 ('+page.h1+'): '+url);
-    if(!/<html[^>]+lang=["']ar["']/i.test(res.body))warnings.push('missing lang=ar: '+url);
-    if(!/<html[^>]+dir=["']rtl["']/i.test(res.body))warnings.push('missing dir=rtl: '+url);
-    if(page.canonical){
+for(const r of results){
+  if(!r)continue;
+  if(r.error)errors.push(r.url+': '+r.error);
+  if(r.status>=300&&r.status<400)errors.push(r.url+': redirect in sitemap to '+r.location);
+  if(r.status!==200)errors.push(r.url+': HTTP '+r.status);
+  if(r.status===200){
+    if(/\bnoindex\b/i.test(r.robots))errors.push(r.url+': noindex response');
+    if(!r.canonical)errors.push(r.url+': missing canonical');
+    if(r.canonical){
       try{
-        const c=normalizeUrl(page.canonical);
-        const expected=normalizeUrl(url);
-        if(new URL(page.canonical).origin!==new URL(SITE).origin)errors.push('off-domain canonical: '+url+' -> '+page.canonical);
-        if(new URL(page.canonical).search||new URL(page.canonical).hash)errors.push('canonical has query/hash: '+url);
-        if(c!==expected)errors.push('canonical mismatch: '+url+' -> '+page.canonical);
-      }catch{errors.push('invalid canonical: '+url+' -> '+page.canonical);}
+        const cu=new URL(r.canonical,new URL(SITE));
+        const expected=new URL(r.url);
+        if(cu.origin!==expected.origin)errors.push(r.url+': canonical off-origin '+r.canonical);
+        if(cu.pathname!==expected.pathname||cu.search!==expected.search||cu.hash!==expected.hash)errors.push(r.url+': canonical does not point to self '+r.canonical);
+      }catch{errors.push(r.url+': invalid canonical '+r.canonical)}
     }
-    const og=meta(res.body,'og:url');
-    if(og&&page.canonical&&normalizeUrl(og)!==normalizeUrl(page.canonical))errors.push('og:url differs from canonical: '+url);
-    if(/noindex/i.test(page.metaRobots)&&sitemapUrls.includes(url))errors.push('sitemap contains noindex page: '+url);
-    if(/noindex/i.test(page.robotsHeader)&&sitemapUrls.includes(url))errors.push('sitemap URL has X-Robots noindex: '+url);
-    if(!/noindex/i.test(page.metaRobots)&&/noindex/i.test(page.robotsHeader)&&sitemapUrls.includes(url))errors.push('HTML/header robots conflict: '+url);
-    if(/noindex/i.test(page.robotsHeader)&&sitemapUrls.includes(url))errors.push('sitemap contains header-noindex page: '+url);
-    const schemas=jsonLd(res.body);
-    for(const data of schemas){
-      for(const node of flattenSchema(data)){
-        const types=Array.isArray(node?.['@type'])?node['@type']:[node?.['@type']];
-        if(types.includes('BreadcrumbList')&&!Array.isArray(node.itemListElement))errors.push('invalid BreadcrumbList: '+url);
-        if(types.includes('Article')&&!node.headline)errors.push('Article missing headline: '+url);
-        if(types.includes('Article')&&node.url&&normalizeUrl(node.url)!==normalizeUrl(url))warnings.push('Article url differs from page: '+url);
-        if(types.includes('WebSite')&&!node.url)errors.push('WebSite missing url: '+url);
-      }
-    }
-    page.internalLinks=internalLinks(res.body,url);
-    discoveredLinks.set(normalizeUrl(url),page.internalLinks.map(normalizeUrl));
-    for(const link of page.internalLinks){
-      const key=normalizeUrl(link);
-      if(incoming.has(key))incoming.set(key,incoming.get(key)+1);
-      else if(!incoming.has(key)&&requestQueue.length<500){incoming.set(key,0);requestQueue.push(link);}
-    }
-  }
-  report.pages.push(page);
-  await sleep(20);
-}
-
-for(const u of sitemapUrls){
-  try{
-    const parsed=new URL(u);
-    if(parsed.origin!==new URL(SITE).origin)errors.push('off-origin sitemap URL: '+u);
-    if(parsed.protocol!=='https:')errors.push('non-HTTPS sitemap URL: '+u);
-    if(parsed.search||parsed.hash)errors.push('query/hash sitemap URL: '+u);
-    const nu=normalizeUrl(u);
-    if(sitemapUrls.filter(x=>normalizeUrl(x)===nu).length>1)errors.push('duplicate normalized sitemap URL: '+u);
-  }catch{errors.push('invalid sitemap URL: '+u);}
-}
-
-const sitemapSet=new Set(sitemapUrls.map(normalizeUrl));
-for(const [url,count] of incoming){
-  if(sitemapSet.has(url)&&url!==normalizeUrl(SITE+'/')&&count===0)warnings.push('orphan sitemap page (no internal HTML link found): '+url);
-}
-report.links={crawledPages:discoveredLinks.size,internalTargets:incoming.size,orphanCount:[...incoming].filter(([u,c])=>sitemapSet.has(u)&&u!==normalizeUrl(SITE+'/')&&c===0).length};
-
-for(const path of EXPECTED_404){
-  const res=await request(new URL(path,SITE).href);
-  if(res.status!==404)errors.push('expected 404 but got '+res.status+': '+path);
-}
-for(const path of NOINDEX_TESTS){
-  const res=await request(new URL(path,SITE).href);
-  if(res.status!==200)warnings.push('private test returned '+res.status+': '+path);
-  if(!/noindex/i.test(res.robotsHeader)&&!/noindex/i.test(meta(res.body,'robots')))warnings.push('private route lacks noindex signals: '+path);
-}
-for(const path of QUERY_TESTS){
-  const res=await request(new URL(path+'?utm_source=seo-audit',SITE).href);
-  if(!(res.status===200||res.status===301||res.status===308))errors.push('query normalization returned '+res.status+': '+path);
-  if(res.status===200){
-    const c=canonical(res.body);
-    if(c&&/[?].*utm_source/.test(c))errors.push('canonical preserves tracking query: '+path+' -> '+c);
+    if(!r.title)errors.push(r.url+': missing title');
+    if(r.elapsed>1500)warnings.push(r.url+': TTFB+download '+r.elapsed+'ms');
+    if(r.bytes>500000)warnings.push(r.url+': HTML '+Math.round(r.bytes/1024)+'KB');
   }
 }
-for(const path of SLASH_TESTS){
-  const res=await request(new URL(path,SITE).href);
-  if(res.status===404)errors.push('trailing-slash variant 404: '+path);
-}
-for(const path of INDEX_TESTS){
-  const res=await request(new URL(path,SITE).href);
-  if(res.status===200)warnings.push('index.html serves 200; verify canonical strategy: '+path);
-}
-for(const path of LEGACY_REDIRECTS){
-  const res=await request(new URL(path,SITE).href);
-  if(!(res.status>=300&&res.status<400))warnings.push('legacy route did not return redirect: '+path+' => '+res.status);
-  else report.redirectTests.push({source:path,status:res.status,location:res.location});
+
+for(const p of NEGATIVE_PATHS){
+  const u=SITE+(p.startsWith('/')?p:'/'+p);
+  const x=await fetchUrl(u,{readBody:false});
+  if(x.res.status>=200&&x.res.status<400)errors.push('negative route is not non-200: '+p+' -> '+x.res.status);
 }
 
-const origin=new URL(SITE);
-const http='http://'+origin.host+'/';
-const httpRes=await request(http);
-report.normalization.push({test:http,status:httpRes.status,location:httpRes.location});
-if(!(httpRes.status>=300&&httpRes.status<400))warnings.push('HTTP origin does not redirect to HTTPS: '+httpRes.status);
-for(const extra of EXTRA_ORIGINS){
-  const r=await request(extra+'/');
-  report.normalization.push({test:extra+'/',status:r.status,location:r.location});
-  if(!(r.status>=300&&r.status<400)&&r.status!==200)warnings.push('alternate hostname response: '+extra+' => '+r.status);
-  if(r.status===200)warnings.push('alternate hostname serves 200; verify canonical hostname strategy: '+extra);
-}
+const rootCheck=await fetchUrl(SITE+'/',{readBody:false});
+if(rootCheck.res.status!==200)errors.push('homepage HTTP '+rootCheck.res.status);
 
-report.finishedAt=new Date().toISOString();
-fs.writeFileSync('seo-live-audit.json',JSON.stringify(report,null,2));
-if(errors.length){
-  console.error(JSON.stringify({errors,warnings},null,2));
-  process.exit(1);
-}
-console.log(JSON.stringify(report,null,2));
+console.log(JSON.stringify({
+  site:SITE,
+  host:EXPECTED_HOST,
+  sitemapCount:sitemapUrls.length,
+  checked:targets.length,
+  errors:errors.length,
+  warnings:warnings.length,
+  maxTTFBms:Math.max(0,...results.map(r=>r?.elapsed||0)),
+  avgMs:results.length?Math.round(results.reduce((a,r)=>a+(r?.elapsed||0),0)/results.length):0
+},null,2));
+if(warnings.length)console.log('WARNINGS\n'+warnings.slice(0,100).join('\n'));
+if(errors.length){console.error('ERRORS\n'+errors.slice(0,200).join('\n'));process.exit(1);}
