@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const SITE="https://tawazon-health.vercel.app";
+const SITE='https://tawazon-health.vercel.app';
 const ROOT=path.resolve('dist');
 const errors=[];
 const canonicals=new Map();
@@ -14,49 +14,81 @@ function walk(dir){
     return entry.isDirectory()?walk(full):[full];
   });
 }
+
 function attr(tag,name){
-  const m=tag.match(new RegExp(name+'=["\\\']([^"\\\']*)["\\\']','i'));
-  return m ? m[1] : '';
+  const prefixes=[name+'="',name+"='"];
+  for(const prefix of prefixes){
+    const start=tag.toLowerCase().indexOf(prefix.toLowerCase());
+    if(start<0) continue;
+    const valueStart=start+prefix.length;
+    const quote=prefix.endsWith('"')?'"':"'";
+    const end=tag.indexOf(quote,valueStart);
+    if(end>=0) return tag.slice(valueStart,end);
+  }
+  return '';
 }
+
+function tags(html,tagName){
+  const out=[];
+  const lower=html.toLowerCase();
+  const needle='<'+tagName.toLowerCase();
+  let pos=0;
+  while((pos=lower.indexOf(needle,pos))>=0){
+    const end=html.indexOf('>',pos);
+    if(end<0) break;
+    out.push(html.slice(pos,end+1));
+    pos=end+1;
+  }
+  return out;
+}
+
 function meta(html,name){
-  for(const part of html.split('<meta').slice(1)){
-    const tag='<meta'+part.split('>')[0]+'>';
+  for(const tag of tags(html,'meta')){
     if(attr(tag,'name').toLowerCase()===name.toLowerCase()) return attr(tag,'content').trim();
   }
   return '';
 }
+
 function canonical(html){
-  for(const part of html.split('<link').slice(1)){
-    const tag='<link'+part.split('>')[0]+'>';
-    if(attr(tag,'rel').toLowerCase().split(/s+/).includes('canonical')) return attr(tag,'href').trim();
+  for(const tag of tags(html,'link')){
+    if(attr(tag,'rel').toLowerCase().split(/\s+/).includes('canonical')) return attr(tag,'href').trim();
   }
   return '';
 }
+
 function title(html){
-  const m=html.match(/<title[^>]*>([sS]*?)<\/title>/i);
-  return m ? m[1].trim() : '';
+  const lower=html.toLowerCase();
+  const start=lower.indexOf('<title');
+  if(start<0) return '';
+  const openEnd=html.indexOf('>',start);
+  const close=lower.indexOf('</title>',openEnd);
+  if(openEnd<0||close<0) return '';
+  return html.slice(openEnd+1,close).trim();
 }
+
 function noindex(html){
-  return /noindex/i.test(meta(html,'robots'));
+  return meta(html,'robots').toLowerCase().includes('noindex');
 }
+
 const files=walk(ROOT).filter(file=>file.endsWith('.html'));
 for(const file of files){
   const html=fs.readFileSync(file,'utf8');
   if(noindex(html)) continue;
-  const t=title(html);
-  const d=meta(html,'description');
+  if(!title(html)) errors.push(file+': missing title');
+  if(!meta(html,'description')) errors.push(file+': missing meta description');
   const c=canonical(html);
-  if(!t) errors.push(file+': missing title');
-  if(!d) errors.push(file+': missing meta description');
   if(!c) errors.push(file+': missing canonical');
   if(c){
     try{
       if(new URL(c).origin!==new URL(SITE).origin) errors.push(file+': off-domain canonical '+c);
-    }catch{errors.push(file+': invalid canonical '+c);}
+    }catch{
+      errors.push(file+': invalid canonical '+c);
+    }
     if(canonicals.has(c)) errors.push('duplicate canonical: '+c+' in '+file+' and '+canonicals.get(c));
     else canonicals.set(c,file);
   }
 }
+
 const sitemapPath=path.join(ROOT,'sitemap.xml');
 if(fs.existsSync(sitemapPath)){
   const xml=fs.readFileSync(sitemapPath,'utf8');
@@ -71,10 +103,18 @@ if(fs.existsSync(sitemapPath)){
     seen.add(url);
     try{
       if(new URL(url).origin!==new URL(SITE).origin) errors.push('off-domain sitemap URL: '+url);
-    }catch{errors.push('invalid sitemap URL: '+url);}
+    }catch{
+      errors.push('invalid sitemap URL: '+url);
+    }
   }
 }
-const notFound=path.join(ROOT,'404.html');
-if(fs.existsSync(notFound)&&!noindex(fs.readFileSync(notFound,'utf8'))) errors.push('404.html must be noindex');
-if(errors.length){console.error(errors.join('\n'));process.exit(1);}
+
+const fourOhFour=path.join(ROOT,'404.html');
+if(fs.existsSync(fourOhFour) && !noindex(fs.readFileSync(fourOhFour,'utf8'))) errors.push('404.html must be noindex');
+
+if(errors.length){
+  console.error(errors.join('\n'));
+  process.exit(1);
+}
+
 console.log('SEO audit passed: '+files.length+' HTML files, '+canonicals.size+' indexable canonical URLs.');
