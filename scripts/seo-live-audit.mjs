@@ -72,7 +72,7 @@ function internalLinks(html,pageUrl){
       const u=new URL(raw,pageUrl);
       if(u.origin!==new URL(SITE).origin)continue;
       if(/^\/(api|assets?)(\/|$)/.test(u.pathname))continue;
-      if(/\\.(css|js|json|png|jpe?g|gif|svg|webp|ico|xml|txt|pdf|woff2?)$/i.test(u.pathname))continue;
+      if(/\.(css|js|json|png|jpe?g|gif|svg|webp|ico|xml|txt|pdf|woff2?)$/i.test(u.pathname))continue;
       u.search='';u.hash='';
       found.add(u.href);
     }catch{}
