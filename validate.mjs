@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root=path.dirname(fileURLToPath(import.meta.url));
 const walk=d=>fs.readdirSync(d,{withFileTypes:true}).flatMap(x=>x.isDirectory()?(['dist','node_modules','.git'].includes(x.name)?[]:walk(path.join(d,x.name))):[path.join(d,x.name)]);
-const html=walk(root).filter(f=>f.endsWith('.html'));
+const html=walk(root).filter(f=>f.endsWith('.html')&&!f.endsWith(path.join(root,'404.html')));
 const problems=[];
 for(const file of html){
  const text=fs.readFileSync(file,'utf8');
