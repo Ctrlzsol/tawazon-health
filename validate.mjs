@@ -21,9 +21,32 @@ for(const file of html){
   try{JSON.parse(match[1])}catch(e){problems.push(`${file}: invalid JSON-LD ${e.message}`)}
  }
 }
-const sitemap=fs.readFileSync(path.join(publishRoot,'sitemap.xml'),'utf8');
-const sitemapUrls=(sitemap.match(/<url>/g)||[]).length;
-if(sitemapUrls!==html.length)problems.push(`sitemap has ${sitemapUrls} URLs for ${html.length} HTML pages`);
+const sitemapText=fs.readFileSync(path.join(root,'sitemap.xml'),'utf8');
+const sitemapUrls=[];
+for(const chunk of sitemapText.split('<loc>').slice(1)){
+  const close=chunk.indexOf('</loc>');
+  if(close>=0)sitemapUrls.push(chunk.slice(0,close).trim());
+}
+const indexableCanonicals=new Set();
+for(const file of html){
+  const text=fs.readFileSync(file,'utf8');
+  if(/<meta[^>]+name=["']robots["'][^>]+content=["'][^"']*noindex/i.test(text))continue;
+  const m=text.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i);
+  if(m)indexableCanonicals.add(m[1].trim());
+}
+const duplicateSitemap=sitemapUrls.filter((u,i,a)=>a.indexOf(u)!==i);
+if(duplicateSitemap.length)problems.push('duplicate sitemap URLs: '+[...new Set(duplicateSitemap)].slice(0,5).join(', '));
+for(const url of sitemapUrls){
+  try{
+    if(new URL(url).origin!==new URL('https://tawazon-health.vercel.app').origin)problems.push('off-origin sitemap URL: '+url);
+  }catch{problems.push('invalid sitemap URL: '+url);}
+}
+for(const canonical of indexableCanonicals){
+  if(!sitemapUrls.includes(canonical))problems.push('indexable canonical missing from sitemap: '+canonical);
+}
+for(const url of sitemapUrls){
+  if(!indexableCanonicals.has(url))problems.push('sitemap URL not backed by indexable canonical: '+url);
+}
 if(problems.length){console.error(problems.join('\n'));process.exit(1)}
 console.log(`Validated ${html.length} HTML pages, internal links, JSON-LD, AdSense and sitemap.`);
 

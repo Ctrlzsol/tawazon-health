@@ -15,6 +15,4 @@ jobs:
         with:
           node-version: '24'
       - run: npm install --no-audit --no-fund
-      - run: npm run build
-      - run: node --check scripts/seo-audit.mjs
-      - run: npm run seo:audit
+      - run: npm run seo:verify
