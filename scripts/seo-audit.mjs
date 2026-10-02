@@ -43,7 +43,7 @@ function targetFor(href){
   if(href==='/'||href==='')return path.join(ROOT,'index.html');
   if(href.startsWith('/guides/'))return null;
   const clean=href.slice(1);
-  if(clean.endsWith('.html'))return path.join(ROOT,clean);
+  if(/\.[A-Za-z0-9]{1,8}$/.test(clean))return path.join(ROOT,clean);
   return path.join(ROOT,clean,'index.html');
 }
 function jsonLdCheck(html,file){
