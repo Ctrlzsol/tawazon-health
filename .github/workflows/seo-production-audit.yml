@@ -10,24 +10,45 @@ on:
 jobs:
   audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
+    env:
+      SEO_SITE_URL: https://tawazon-health.vercel.app
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - run: node --check scripts/seo-production-audit.mjs
-      - run: node scripts/seo-production-audit.mjs > seo-production-audit-report.json
-      - run: node scripts/gsc-validation-manifest.mjs https://tawazon-health.vercel.app/sitemap.xml gsc-validation-manifest.json
-      - name: Upload GSC validation manifest
+      - run: npm install --no-audit --no-fund
+      - name: Build
+        run: npm run build
+      - name: Static SEO audit
+        run: npm run seo:audit
+      - name: Content graph audit
+        run: npm run seo:content-graph
+      - name: Performance audit
+        run: npm run seo:performance
+      - name: Repository validation
+        run: npm run check
+      - name: Script syntax verification
+        run: |
+          node --check scripts/seo-production-audit.mjs
+          node --check scripts/gsc-validation-manifest.mjs
+          node --check scripts/seo-live-audit.mjs
+      - name: Production audit
+        run: npm run seo:production-audit > seo-production-audit-report.json
+      - name: Generate GSC inspection manifest
+        run: npm run seo:gsc-manifest
+      - name: Live crawl audit
+        run: npm run seo:live-audit > seo-live-audit-report.json
+      - name: Upload audit artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: gsc-validation-manifest
-          path: gsc-validation-manifest.json
-      - name: Upload SEO audit report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: seo-production-audit-report
-          path: seo-production-audit-report.json
+          name: seo-production-audit
+          path: |
+            seo-production-audit-report.json
+            seo-live-audit-report.json
+            seo-content-graph-audit.json
+            seo-performance-audit.json
+            gsc-indexing-manifest.json
+          if-no-files-found: ignore
