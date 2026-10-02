@@ -1,0 +1,21 @@
+name: SEO Live Monitor
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 2 * * 1'
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SEO_SITE_URL: https://tawazon-health.vercel.app
+      SEO_LIVE_MAX_URLS: '500'
+      SEO_LIVE_CONCURRENCY: '6'
+      SEO_NEGATIVE_PATHS: '/definitely-not-a-real-route-20261003'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm install --no-audit --no-fund
+      - run: npm run seo:live
