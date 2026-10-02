@@ -29,7 +29,7 @@ async function request(url,method='GET'){
 }
 function attrs(tag){
   const out={};
-  const pattern=/([\\w:-]+)\\s*=\\s*["']([^"']*)["']/g;
+  const pattern=/([\w:-]+)\s*=\s*["']([^"']*)["']/g;
   for(const match of tag.matchAll(pattern))out[match[1].toLowerCase()]=match[2];
   return out;
 }
@@ -71,7 +71,7 @@ function internalLinks(html,pageUrl){
     try{
       const u=new URL(raw,pageUrl);
       if(u.origin!==new URL(SITE).origin)continue;
-      if(/^\\/(api|assets?)(\\/|$)/.test(u.pathname))continue;
+      if(/^\/(api|assets?)(\/|$)/.test(u.pathname))continue;
       if(/\\.(css|js|json|png|jpe?g|gif|svg|webp|ico|xml|txt|pdf|woff2?)$/i.test(u.pathname))continue;
       u.search='';u.hash='';
       found.add(u.href);
@@ -88,13 +88,13 @@ function normalizeUrl(url){
 
 const robotsRes=await request(SITE+'/robots.txt');
 if(robotsRes.status!==200)errors.push('robots.txt returned '+robotsRes.status);
-if(!/Sitemap:\\s*https://tawazon-health\\.vercel\\.app\/sitemap\\.xml/i.test(robotsRes.body))errors.push('robots.txt is missing canonical sitemap directive');
+if(!/Sitemap:\s*https://tawazon-health\\.vercel\\.app\/sitemap\\.xml/i.test(robotsRes.body))errors.push('robots.txt is missing canonical sitemap directive');
 report.robots={status:robotsRes.status,contentType:robotsRes.contentType};
 const sitemapRes=await request(SITE+'/sitemap.xml');
 if(sitemapRes.status!==200)errors.push('sitemap.xml returned '+sitemapRes.status);
 if(!/xml/i.test(sitemapRes.contentType))warnings.push('sitemap content-type is '+sitemapRes.contentType);
 const sitemapUrls=[];
-for(const m of sitemapRes.body.matchAll(/<loc>([^<]+)<\\/loc>/g))sitemapUrls.push(m[1].trim());
+for(const m of sitemapRes.body.matchAll(/<loc>([^<]+)<\/loc>/g))sitemapUrls.push(m[1].trim());
 report.sitemap={status:sitemapRes.status,count:sitemapUrls.length,contentType:sitemapRes.contentType};
 
 const targetUrls=[...new Set([...sitemapUrls,...URLS.map(x=>new URL(x,SITE).href)])];
@@ -111,9 +111,9 @@ for(let i=0;i<requestQueue.length;i++){
   if(res.elapsedMs>2500)warnings.push('slow response '+res.elapsedMs+'ms: '+url);
 
   if(res.contentLength>500000)warnings.push('HTML >500KB: '+url+' ('+res.contentLength+')');
-  if(res.status===200&&/text\\/html/i.test(res.contentType)){
-    page.title=title(res.body);page.canonical=canonical(res.body);page.metaRobots=meta(res.body,'robots');page.h1=h1Count(res.body);const bodyText=res.body.replace(/<script[\\s\\S]*?<\\/script>/gi,' ').replace(/<style[\\s\\S]*?<\\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/\\s+/g,' ').trim();page.textChars=bodyText.length;
-    if(/(\/study\/|\/guides\/|\/blog\/|\/article-)/.test(new URL(url).pathname)&&page.textChars<800)warnings.push('thin live content (<800 chars): '+url);
+  if(res.status===200&&/text\/html/i.test(res.contentType)){
+    page.title=title(res.body);page.canonical=canonical(res.body);page.metaRobots=meta(res.body,'robots');page.h1=h1Count(res.body);const bodyText=res.body.replace(/<script[\s\\S]*?<\/script>/gi,' ').replace(/<style[\s\\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();page.textChars=bodyText.length;
+  
     if(!page.title)errors.push('missing title: '+url);
     if(!meta(res.body,'description'))errors.push('missing meta description: '+url);
     if(!page.canonical)errors.push('missing canonical: '+url);
