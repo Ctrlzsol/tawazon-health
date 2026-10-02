@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const SITE=process.env.SITE_URL || 'https://tawazon-health.vercel.app';
+const SITE_ORIGIN=new URL(SITE).origin;
 
 function walk(dir){
   return fs.readdirSync(dir,{withFileTypes:true}).flatMap(entry=>{
@@ -20,6 +21,7 @@ for(const file of htmlFiles){
   if(/<meta[^>]+name=["']robots["'][^>]+content=["'][^"']*noindex/i.test(html)) continue;
   const match=html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i);
   if(match){
+    try { if(new URL(match[1],SITE).origin!==SITE_ORIGIN) continue; } catch { continue; }
     urls.push(match[1]);
     continue;
   }
