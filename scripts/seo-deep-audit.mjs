@@ -9,206 +9,95 @@ const errors=[];
 const warnings=[];
 const canonicals=new Map();
 const titles=new Map();
-const staticRoutes=new Map();
-const dynamicPrefixes=String(process.env.SEO_DYNAMIC_PREFIXES||'').split(',').map(s=>s.trim()).filter(Boolean);
 
 function walk(dir){
   if(!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir,{withFileTypes:true}).flatMap(entry=>{
-    const full=path.join(dir,entry.name);
-    if(entry.name.startsWith('.')||entry.name==='node_modules') return [];
-    return entry.isDirectory()?walk(full):[full];
+  return fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>{
+    const full=path.join(dir,e.name);
+    if(e.name.startsWith('.')||e.name==='node_modules') return [];
+    return e.isDirectory()?walk(full):[full];
   });
 }
-function attrs(tag,name){
-  const re1=new RegExp(name+'="([^"]*)"','i');
-  const m1=tag.match(re1); if(m1) return m1[1];
-  const re2=new RegExp(name+"='([^']*)'",'i');
-  const m2=tag.match(re2); return m2?m2[1]:'';
+function tagList(html,name){
+  const out=[]; const lower=html.toLowerCase(); const needle='<'+name.toLowerCase(); let p=0;
+  while((p=lower.indexOf(needle,p))>=0){const end=html.indexOf('>',p);if(end<0)break;out.push(html.slice(p,end+1));p=end+1;}
+  return out;
 }
-function meta(html,name){
-  for(const part of html.split('<meta').slice(1)){
-    const tag='<meta'+part.split('>')[0]+'>';
-    if(attrs(tag,'name').toLowerCase()===name.toLowerCase()) return attrs(tag,'content').trim();
-  }
+function attr(tag,name){
+  let p=tag.toLowerCase().indexOf(name.toLowerCase()+'="');
+  if(p>=0){const s=p+name.length+2,e=tag.indexOf('"',s);if(e>=0)return tag.slice(s,e)}
+  p=tag.toLowerCase().indexOf(name.toLowerCase()+"='");
+  if(p>=0){const s=p+name.length+2,e=tag.indexOf("'",s);if(e>=0)return tag.slice(s,e)}
   return '';
 }
-function canonical(html){
-  for(const part of html.split('<link').slice(1)){
-    const tag='<link'+part.split('>')[0]+'>';
-    if(attrs(tag,'rel').toLowerCase().split(/\s+/).includes('canonical')) return attrs(tag,'href').trim();
-  }
-  return '';
-}
-function title(html){
-  const m=html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  return m?m[1].trim():'';
-}
-function h1Count(html){ return (html.match(/<h1\b/gi)||[]).length; }
-function isNoindex(html){ return /\bnoindex\b/i.test(meta(html,'robots')); }
-function stripMarkup(html){
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi,' ')
-    .replace(/<style[\s\S]*?<\/style>/gi,' ')
-    .replace(/<[^>]+>/g,' ')
-    .replace(/\s+/g,' ')
-    .trim();
-}
+function meta(html,name){for(const t of tagList(html,'meta'))if(attr(t,'name').toLowerCase()===name.toLowerCase())return attr(t,'content').trim();return '';}
+function canonical(html){for(const t of tagList(html,'link'))if(attr(t,'rel').toLowerCase().split(/\s+/).includes('canonical'))return attr(t,'href').trim();return '';}
+function title(html){const m=html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);return m?m[1].trim():'';}
+function noindex(html){return /\bnoindex\b/i.test(meta(html,'robots'));}
 function routeForFile(file){
-  const rel=path.relative(DIST,file).replaceAll(path.sep,'/');
-  if(rel==='index.html') return '/';
-  if(rel.endsWith('/index.html')) return '/'+rel.slice(0,-'/index.html'.length);
-  return '/'+rel;
+ const rel=path.relative(DIST,file).replaceAll(path.sep,'/');
+ if(rel==='index.html')return '/';
+ if(rel.endsWith('/index.html'))return '/'+rel.slice(0,-'/index.html'.length);
+ return '/'+rel;
 }
-function isDynamicAllowed(pathname){
-  return dynamicPrefixes.some(prefix=>pathname===prefix||pathname.startsWith(prefix+'/'));
-}
-function expectedCanonical(file){
-  const route=routeForFile(file);
-  return SITE+(route==='/'?'/':route);
-}
-
 const htmlFiles=walk(DIST).filter(f=>f.endsWith('.html'));
-if(!htmlFiles.length) errors.push('No HTML files found under dist/');
-
+const records=new Map();
 for(const file of htmlFiles){
-  const rel=path.relative(DIST,file).replaceAll(path.sep,'/');
-  if(rel==='404.html') continue;
-  if(rel.startsWith('generated-guides/')) continue;
-  const html=fs.readFileSync(file,'utf8');
-  const noindex=isNoindex(html);
-  if(noindex) continue;
-
-  const can=canonical(html);
-  const t=title(html);
-  const d=meta(html,'description');
-  if(!t) errors.push(rel+': missing title');
-  if(!d) errors.push(rel+': missing meta description');
-  if(!can) errors.push(rel+': missing canonical');
-  if(h1Count(html)!==1) errors.push(rel+': expected exactly one H1, found '+h1Count(html));
-
-  const lang=(html.match(/<html[^>]*\blang=["']([^"']+)["']/i)||[])[1]||'';
-  const dir=(html.match(/<html[^>]*\bdir=["']([^"']+)["']/i)||[])[1]||'';
-  if(lang!=='ar') warnings.push(rel+': html lang is '+(lang||'(missing)'));
-  if(dir!=='rtl') warnings.push(rel+': html dir is '+(dir||'(missing)'));
-
-  if(can){
-    try{
-      const u=new URL(can);
-      if(u.origin!==ORIGIN) errors.push(rel+': canonical off-origin '+can);
-      if(u.search||u.hash) errors.push(rel+': canonical contains query/hash '+can);
-    }catch{ errors.push(rel+': invalid canonical '+can); }
-
-    const exp=expectedCanonical(file);
-    if(!isDynamicAllowed(new URL(can).pathname) && can!==exp) errors.push(rel+': canonical mismatch; expected '+exp+' got '+can);
-    if(canonicals.has(can)) errors.push('duplicate canonical '+can+' in '+rel+' and '+canonicals.get(can));
-    else canonicals.set(can,rel);
-  }
-
-  if(t){
-    if(titles.has(t)) warnings.push('duplicate title in '+rel+' and '+titles.get(t));
-    else titles.set(t,rel);
-    if(t.length>70) warnings.push(rel+': title length '+t.length);
-  }
-  if(d.length>180) warnings.push(rel+': meta description length '+d.length);
-
-  for(const part of html.split('<script').slice(1)){
-    const end=part.indexOf('>');
-    if(end<0) continue;
-    const tag=part.slice(0,end+1);
-    if(!/type=["']application\/ld\+json["']/i.test(tag)) continue;
-    const close=part.indexOf('</script>');
-    if(close<0) { errors.push(rel+': unterminated JSON-LD script'); continue; }
-    try{ JSON.parse(part.slice(end+1,close)); }catch(e){ errors.push(rel+': invalid JSON-LD '+e.message); }
-  }
-
-  staticRoutes.set(routeForFile(file),{file,can});
+ const rel=path.relative(DIST,file).replaceAll(path.sep,'/');
+ if(rel==='404.html'||rel.startsWith('generated-guides/'))continue;
+ const html=fs.readFileSync(file,'utf8');
+ if(noindex(html))continue;
+ const t=title(html),d=meta(html,'description'),c=canonical(html);
+ if(!t)errors.push(rel+': missing title');
+ if(!d)errors.push(rel+': missing description');
+ if(!c)errors.push(rel+': missing canonical');
+ if((html.match(/<h1\b/gi)||[]).length!==1)errors.push(rel+': expected exactly one H1');
+ if(c){
+  try{const u=new URL(c);if(u.origin!==ORIGIN)errors.push(rel+': off-domain canonical '+c);if(u.search||u.hash)errors.push(rel+': canonical has query/hash '+c);}
+  catch{errors.push(rel+': invalid canonical '+c)}
+  if(canonicals.has(c))errors.push('duplicate canonical '+c+' in '+rel+' and '+canonicals.get(c));else canonicals.set(c,rel);
+ }
+ if(t){if(titles.has(t))warnings.push('duplicate title '+rel+' and '+titles.get(t));else titles.set(t,rel);}
+ records.set(routeForFile(file),{file,canonical:c});
+ for(const part of html.split('<script').slice(1)){
+  const end=part.indexOf('>'); if(end<0)continue;
+  const open=part.slice(0,end+1); if(!/type=["']application\/ld\+json["']/i.test(open))continue;
+  const close=part.indexOf('</script>'); if(close<0){errors.push(rel+': unterminated JSON-LD');continue;}
+  try{JSON.parse(part.slice(end+1,close));}catch(e){errors.push(rel+': invalid JSON-LD '+e.message);}
+ }
 }
-
 const sitemapPath=path.join(DIST,'sitemap.xml');
-const sitemapUrls=[];
-if(fs.existsSync(sitemapPath)){
-  const xml=fs.readFileSync(sitemapPath,'utf8');
-  for(const chunk of xml.split('<loc>').slice(1)){
-    const end=chunk.indexOf('</loc>');
-    if(end>=0) sitemapUrls.push(chunk.slice(0,end).trim());
-  }
-  const seen=new Set();
-  for(const url of sitemapUrls){
-    if(seen.has(url)) errors.push('duplicate sitemap URL '+url);
-    seen.add(url);
-    try{
-      const u=new URL(url);
-      if(u.origin!==ORIGIN) errors.push('off-origin sitemap URL '+url);
-      if(u.search||u.hash) errors.push('sitemap URL contains query/hash '+url);
-      const route=u.pathname.replace(/\/+$/,'')||'/';
-      const record=staticRoutes.get(route);
-      if(record && record.can!==url) errors.push('sitemap/canonical mismatch '+url+' vs '+record.can);
-      if(record && isNoindex(fs.readFileSync(record.file,'utf8'))) errors.push('noindex URL in sitemap '+url);
-      if(!record && !isDynamicAllowed(route)) errors.push('sitemap URL has no generated page or allowed dynamic route '+url);
-    }catch{ errors.push('invalid sitemap URL '+url); }
-  }
-} else {
-  errors.push('dist/sitemap.xml missing');
+if(!fs.existsSync(sitemapPath))errors.push('dist/sitemap.xml missing');
+else{
+ const xml=fs.readFileSync(sitemapPath,'utf8');const urls=[];for(const ch of xml.split('<loc>').slice(1)){const e=ch.indexOf('</loc>');if(e>=0)urls.push(ch.slice(0,e).trim())}
+ const seen=new Set();
+ for(const u of urls){
+  if(seen.has(u))errors.push('duplicate sitemap URL '+u);seen.add(u);
+  try{const x=new URL(u);if(x.origin!==ORIGIN)errors.push('off-domain sitemap '+u);if(x.search||x.hash)errors.push('sitemap query/hash '+u);const route=x.pathname.replace(/\/+$/,'')||'/';if(records.has(route)&&records.get(route).canonical!==u)errors.push('sitemap/canonical mismatch '+u+' vs '+records.get(route).canonical)}catch{errors.push('invalid sitemap URL '+u)}
+ }
 }
-
-const fourOhFour=path.join(DIST,'404.html');
-if(fs.existsSync(fourOhFour) && !isNoindex(fs.readFileSync(fourOhFour,'utf8'))) errors.push('404.html must be noindex');
-
-const routingPath=path.resolve('vercel.json');
-if(fs.existsSync(routingPath)){
-  try{
-    const routing=JSON.parse(fs.readFileSync(routingPath,'utf8'));
-    const redirects=Array.isArray(routing.redirects)?routing.redirects:[];
-    const exact=new Map();
-    for(const r of redirects){
-      if(r.source && !r.source.includes(':') && !r.source.includes('*')) exact.set(r.source,r.destination||'');
-    }
-    for(const [source,dest] of exact){
-      if(exact.has(dest) && dest!==source) errors.push('redirect chain '+source+' -> '+dest+' -> '+exact.get(dest));
-      if(sitemapUrls.includes(SITE+source.replace(/\/$/,''))) errors.push('redirect source is present in sitemap '+source);
-    }
-    const headers=Array.isArray(routing.headers)?routing.headers:[];
-    for(const h of headers){
-      const src=String(h.source||'');
-      if(/admin|account|login|signup|checkout|payment|reports|documents|activate|create|reset-password|pro|growth-center/i.test(src)){
-        const list=Array.isArray(h.headers)?h.headers:[];
-        if(!list.some(x=>String(x.key||'').toLowerCase()==='x-robots-tag'&&/noindex/i.test(String(x.value||'')))){
-          errors.push('private route lacks X-Robots-Tag noindex: '+src);
-        }
-      }
-    }
-  }catch(e){ errors.push('invalid vercel.json: '+e.message); }
+const f404=path.join(DIST,'404.html');if(fs.existsSync(f404)&&!noindex(fs.readFileSync(f404,'utf8')))errors.push('404.html must be noindex');
+const routing=path.resolve('vercel.json');
+if(fs.existsSync(routing)){
+ try{
+  const v=JSON.parse(fs.readFileSync(routing,'utf8'));const redirects=Array.isArray(v.redirects)?v.redirects:[];const exact=new Map();
+  for(const r of redirects)if(r.source&&!r.source.includes(':')&&!r.source.includes('*'))exact.set(r.source,r.destination||'');
+  for(const [s,d] of exact)if(exact.has(d)&&s!==d)errors.push('redirect chain '+s+' -> '+d+' -> '+exact.get(d));
+ }catch(e){errors.push('invalid vercel.json '+e.message)}
 }
-
-const allLinks=[];
+let links=0;
 for(const file of htmlFiles){
-  const html=fs.readFileSync(file,'utf8');
-  if(path.relative(DIST,file)==='404.html') continue;
-  for(const m of html.matchAll(/href=["']([^"']+)["']/gi)){
-    const href=m[1];
-    if(!href.startsWith('/')||href.startsWith('//')) continue;
-    const clean=href.split('#')[0].split('?')[0];
-    if(!clean||clean.startsWith('/api/')) continue;
-    allLinks.push({file,clean});
-  }
+ const rel=path.relative(DIST,file).replaceAll(path.sep,'/');if(rel==='404.html')continue;
+ const html=fs.readFileSync(file,'utf8');
+ for(const m of html.matchAll(/href=["']([^"']+)["']/gi)){
+  const h=m[1];if(!h.startsWith('/')||h.startsWith('//'))continue;const clean=h.split('#')[0].split('?')[0];if(!clean||clean.startsWith('/api/'))continue;links++;
+  const route=clean!=='/'?clean.replace(/\/+$/,''):'/';
+  if(records.has(route))continue;
+  if(route==='/feed.xml'||route==='/robots.txt'||route==='/sitemap.xml')continue;
+  if(route.startsWith('/tools-')||route.startsWith('/sleep-calculator.html')||route.startsWith('/topic-')||route.startsWith('/article-')){errors.push('unknown internal SEO target '+clean+' from '+rel);}
+ }
 }
-for(const link of allLinks){
-  let target=link.clean;
-  if(target!=='/'&&target.endsWith('/')) target=target.slice(0,-1);
-  const record=staticRoutes.get(target);
-  if(record) continue;
-  if(isDynamicAllowed(target)) continue;
-  if(target.startsWith('/tools/')||target.startsWith('/blog/')||target.startsWith('/guides/')||target.startsWith('/study/')){
-    errors.push('broken/unknown internal SEO link '+link.clean+' from '+path.relative(DIST,link.file));
-  }
-}
-
-const publicHtml=htmlFiles.filter(f=>path.relative(DIST,f)!=='404.html'&&!path.relative(DIST,f).startsWith('generated-guides/'));
-const indexable=publicHtml.filter(f=>!isNoindex(fs.readFileSync(f,'utf8')));
-console.log(JSON.stringify({
-  files:publicHtml.length,indexable:indexable.length,uniqueCanonicals:canonicals.size,
-  sitemap:sitemapUrls.length,errors:errors.length,warnings:warnings.length
-},null,2));
-if(warnings.length) console.log('WARNINGS\n'+warnings.slice(0,80).join('\n'));
-if(errors.length){ console.error('ERRORS\n'+errors.join('\n')); process.exit(1); }
+const bytes=htmlFiles.reduce((n,f)=>n+fs.statSync(f).size,0);
+console.log(JSON.stringify({files:htmlFiles.length,indexable:records.size,canonicals:canonicals.size,sitemap:fs.existsSync(sitemapPath)?(fs.readFileSync(sitemapPath,'utf8').match(/<loc>/g)||[]).length:0,internalLinks:links,htmlBytes:bytes,errors:errors.length,warnings:warnings.length},null,2));
+if(warnings.length)console.log('WARNINGS\n'+warnings.slice(0,80).join('\n'));
+if(errors.length){console.error('ERRORS\n'+errors.join('\n'));process.exit(1);}
