@@ -1,55 +1,158 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const SITE = 'https://tawazon-health.vercel.app';
-const ROOT = path.resolve('dist');
-const errors = [];
-const canonicalMap = new Map();
+const SITE="https://tawazon-health.vercel.app";
+const ROOT=path.resolve('dist');
+const errors=[];
+const canonicalMap=new Map();
 
 function walk(dir){
   if(!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir,{withFileTypes:true}).flatMap(entry=>{
     const full=path.join(dir,entry.name);
-    if(entry.name.startsWith('.') || entry.name==='node_modules') return [];
+    if(entry.name.startsWith('.')||entry.name==='node_modules') return [];
     return entry.isDirectory()?walk(full):[full];
   });
 }
-function meta(html,name){
-  const m=html.match(new RegExp('<meta[^>]+name=["\\']'+name+'["\\'][^>]*content=["\\']([^"\\']*)["\\']','i'));
-  return m?.[1]?.trim() || '';
+
+function attr(tag,name){
+  const m=tag.match(new RegExp(name+"=[\"']([^\"']*)[\"']","i"));
+  return m ? m[1] : '';
 }
-function canonical(html){
-  return (html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i)||[])[1]?.trim() || '';
+
+function getMeta(html,name){
+  for(const part of html.split('<meta').slice(1)){
+    const tag='<meta'+part.split('>')[0]+'>';
+    if(attr(tag,'name').toLowerCase()===name.toLowerCase()) return attr(tag,'content').trim();
+  }
+  return '';
 }
-const files=walk(ROOT).filter(f=>f.endsWith('.html'));
-for(const file of files){
+
+function getCanonical(html){
+  for(const part of html.split('<link').slice(1)){
+    const tag='<link'+part.split('>')[0]+'>';
+    if(attr(tag,'rel').toLowerCase().split(/ +/).includes('canonical')) return attr(tag,'href').trim();
+  }
+  return '';
+}
+
+function getTitle(html){
+  const start=html.toLowerCase().indexOf('<title');
+  if(start<0) return '';
+  const openEnd=html.indexOf('>',start);
+  const close=html.toLowerCase().indexOf('</title>',openEnd);
+  if(openEnd<0||close<0) return '';
+  return html.slice(openEnd+1,close).trim();
+}
+
+function isNoindex(html){
+  return /noindex/i.test(getMeta(html,'robots'));
+}
+
+const htmlFiles=walk(ROOT).filter(file=>file.endsWith('.html'));
+for(const file of htmlFiles){
   const html=fs.readFileSync(file,'utf8');
-  const noindex=/<meta[^>]+name=["']robots["'][^>]+content=["'][^"']*noindex/i.test(html);
-  const title=(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1]?.trim()||'';
-  const desc=meta(html,'description');
-  const can=canonical(html);
-  if(!noindex){
-    if(!title) errors.push(file+': missing title');
-    if(!desc) errors.push(file+': missing description');
-    if(!can) errors.push(file+': missing canonical');
-    if(can){
-      try{if(new URL(can).origin!==new URL(SITE).origin) errors.push(file+': off-domain canonical '+can);}
-      catch{errors.push(file+': invalid canonical '+can);}
-      if(canonicalMap.has(can)) errors.push('duplicate canonical '+can+' in '+file+' and '+canonicalMap.get(can));
-      else canonicalMap.set(can,file);
+  if(isNoindex(html)) continue;
+  const title=getTitle(html);
+  const description=getMeta(html,'description');
+  const canonical=getCanonical(html);
+  if(!title) errors.push(file+': missing title');
+  if(!description) errors.push(file+': missing meta description');
+  if(!canonical) errors.push(file+': missing canonical');
+
+  if(canonical){
+    try{
+      if(new URL(canonical).origin!==new URL(SITE).origin) errors.push(file+': off-domain canonical '+canonical);
+    }catch{
+      errors.push(file+': invalid canonical '+canonical);
     }
+    if(canonicalMap.has(canonical)) errors.push('duplicate canonical '+canonical+' in '+file+' and '+canonicalMap.get(canonical));
+    else canonicalMap.set(canonical,file);
+
+    const relative='/'+path.relative(ROOT,file).replaceAll(path.sep,'/');
+    let expected=SITE+'/';
+    if(relative!=='/' && relative!=='/index.html'){
+      expected=SITE+(relative.endsWith('/index.html') ? relative.slice(0,-'/index.html'.length) : relative);
+    }
+    if(canonical!==expected) errors.push(file+': canonical mismatch; expected '+expected+' got '+canonical);
   }
 }
-const sitemap=path.join(ROOT,'sitemap.xml');
-if(fs.existsSync(sitemap)){
-  const xml=fs.readFileSync(sitemap,'utf8');
-  const urls=[...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map(m=>m[1].trim());
-  const dup=urls.filter((u,i,a)=>a.indexOf(u)!==i);
-  const bad=urls.filter(u=>{try{return new URL(u).origin!==new URL(SITE).origin}catch{return true}});
-  if(dup.length) errors.push('duplicate sitemap URLs: '+[...new Set(dup)].slice(0,5).join(', '));
-  if(bad.length) errors.push('off-domain sitemap URLs: '+bad.slice(0,5).join(', '));
+
+const sitemapPath=path.join(ROOT,'sitemap.xml');
+if(fs.existsSync(sitemapPath)){
+  const xml=fs.readFileSync(sitemapPath,'utf8');
+  const urls=[];
+  for(const chunk of xml.split('<loc>').slice(1)){
+    const end=chunk.indexOf('</loc>');
+    if(end>=0) urls.push(chunk.slice(0,end).trim());
+  }
+  const seen=new Set();
+  for(const url of urls){
+    if(seen.has(url)) errors.push('duplicate sitemap URL: '+url);
+    seen.add(url);
+    try{
+      if(new URL(url).origin!==new URL(SITE).origin) errors.push('off-domain sitemap URL: '+url);
+    }catch{
+      errors.push('invalid sitemap URL: '+url);
+    }
+    if(!canonicalMap.has(url) && !url.includes('/guides/')) errors.push('sitemap URL without matching canonical: '+url);
+  }
 }
-const f404=files.find(f=>f.endsWith('/404.html')||f==='dist/404.html');
-if(f404 && !/<meta[^>]+name=["']robots["'][^>]+content=["'][^"']*noindex/i.test(fs.readFileSync(f404,'utf8'))) errors.push('404.html must be noindex');
-if(errors.length){console.error(errors.join('\n'));process.exit(1);}
-console.log('SEO audit passed: '+files.length+' HTML files, '+canonicalMap.size+' unique indexable canonicals.');
+
+const routingFile=path.resolve('vercel.json');
+if(fs.existsSync(routingFile)){
+  try{
+    const routing=JSON.parse(fs.readFileSync(routingFile,'utf8'));
+    const redirects=Array.isArray(routing.redirects)?routing.redirects:[];
+    const staticRedirects=new Map();
+    for(const rule of redirects){
+      const source=String(rule.source||'');
+      const destination=String(rule.destination||'');
+      if(!source) continue;
+      staticRedirects.set(source,destination);
+    }
+    for(const [source,destination] of staticRedirects){
+      if(!source.includes(':') && staticRedirects.has(destination) && destination!==source){
+        errors.push('redirect chain: '+source+' -> '+destination+' -> '+staticRedirects.get(destination));
+      }
+    }
+    const redirectMatches=(source,urlPath)=>{
+      if(source===urlPath) return true;
+      const colon=source.indexOf(':');
+      if(colon<0) return false;
+      const prefix=source.slice(0,colon);
+      const rest=source.slice(colon);
+      const star=rest.indexOf('*');
+      const suffix=star>=0?rest.slice(star+1):rest.slice(rest.indexOf('/')>=0?rest.indexOf('/'):rest.length);
+      if(!urlPath.startsWith(prefix)) return false;
+      if(star>=0) return true;
+      if(suffix && !urlPath.endsWith(suffix)) return false;
+      return urlPath.slice(prefix.length, suffix?urlPath.length-suffix.length:undefined).length>0 && !urlPath.slice(prefix.length, suffix?urlPath.length-suffix.length:undefined).includes('/');
+    };
+    if(fs.existsSync(sitemapPath)){
+      const sitemapXml=fs.readFileSync(sitemapPath,'utf8');
+      const sitemapUrls=[];
+      for(const chunk of sitemapXml.split('<loc>').slice(1)){
+        const end=chunk.indexOf('</loc>');
+        if(end>=0) sitemapUrls.push(chunk.slice(0,end).trim());
+      }
+      for(const url of sitemapUrls){
+        let urlPath='';
+        try{urlPath=new URL(url).pathname;}catch{continue;}
+        for(const source of staticRedirects.keys()){
+          if(redirectMatches(source,urlPath)) errors.push('sitemap contains redirect source: '+urlPath+' matched '+source);
+        }
+      }
+    }
+  }catch(e){
+    errors.push('invalid vercel.json: '+e.message);
+  }
+}
+const fourOhFour=path.join(ROOT,'404.html');
+if(fs.existsSync(fourOhFour) && !isNoindex(fs.readFileSync(fourOhFour,'utf8'))) errors.push('404.html must be noindex');
+
+if(errors.length){
+  console.error(errors.join('\n'));
+  process.exit(1);
+}
+console.log('SEO audit passed: '+htmlFiles.length+' HTML files, '+canonicalMap.size+' indexable canonical URLs.');
