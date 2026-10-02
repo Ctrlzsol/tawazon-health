@@ -19,6 +19,30 @@ function noindex(html,headers){return /noindex/i.test(meta(html,'robots'))||/noi
 function internalLinks(html){const out=[];const origin=new URL(SITE).origin;for(const m of html.matchAll(/href=["']([^"']+)["']/gi)){const href=m[1].trim();if(!href||href.startsWith('#')||href.startsWith('mailto:')||href.startsWith('tel:'))continue;try{const u=new URL(href,SITE);if(u.origin===origin){u.hash='';out.push(u.href);}}catch{}}return out;}
 async function get(url){const c=new AbortController();const timer=setTimeout(()=>c.abort(),TIMEOUT_MS);const started=Date.now();try{const response=await fetch(url,{redirect:'manual',signal:c.signal,headers:{'user-agent':'Tawazon-SEO-Production-Audit/1.0'}});const body=await response.text();return {response,body,elapsed:Date.now()-started};}finally{clearTimeout(timer);}}
 
+
+function validateStructuredData(html,url){
+  for(const m of html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)){
+    let data;try{data=JSON.parse(m[1]);}catch{continue;}
+    const nodes=Array.isArray(data)?data:(data&&Array.isArray(data['@graph'])?data['@graph']:[data]);
+    for(const node of nodes){
+      if(!node||typeof node!=='object')continue;
+      const types=Array.isArray(node['@type'])?node['@type']:[node['@type']].filter(Boolean);
+      if(types.includes('Article')&&!node.headline)critical.push('Article JSON-LD missing headline '+url);
+      if(types.includes('BreadcrumbList')&&!Array.isArray(node.itemListElement))critical.push('BreadcrumbList JSON-LD missing itemListElement '+url);
+      if(types.includes('WebSite')&&(!node.name||!node.url))critical.push('WebSite JSON-LD missing name/url '+url);
+      if(types.includes('WebApplication')&&(!node.name||!node.url))critical.push('WebApplication JSON-LD missing name/url '+url);
+    }
+  }
+}
+async function checkQueryVariant(url){
+  const clean=url.split('?')[0].split('#')[0];
+  const result=await get(clean+'?utm_source=seo-audit');
+  if(result.response.status===200){
+    const c=canonical(result.body);
+    if(c&&new URL(c,clean).href!==new URL(clean).href)critical.push('Query variant canonical mismatch '+clean+' -> '+c);
+  }
+}
+
 async function main(){
  const sm=await get(SITE+'/sitemap.xml');
  if(sm.response.status!==200)CRITICAL.push('Sitemap status '+sm.response.status);
