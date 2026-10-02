@@ -99,6 +99,55 @@ if(fs.existsSync(sitemapPath)){
   }
 }
 
+const routingFile=path.resolve('vercel.json');
+if(fs.existsSync(routingFile)){
+  try{
+    const routing=JSON.parse(fs.readFileSync(routingFile,'utf8'));
+    const redirects=Array.isArray(routing.redirects)?routing.redirects:[];
+    const staticRedirects=new Map();
+    for(const rule of redirects){
+      const source=String(rule.source||'');
+      const destination=String(rule.destination||'');
+      if(!source) continue;
+      staticRedirects.set(source,destination);
+    }
+    for(const [source,destination] of staticRedirects){
+      if(!source.includes(':') && staticRedirects.has(destination) && destination!==source){
+        errors.push('redirect chain: '+source+' -> '+destination+' -> '+staticRedirects.get(destination));
+      }
+    }
+    const redirectMatches=(source,urlPath)=>{
+      if(source===urlPath) return true;
+      const colon=source.indexOf(':');
+      if(colon<0) return false;
+      const prefix=source.slice(0,colon);
+      const rest=source.slice(colon);
+      const star=rest.indexOf('*');
+      const suffix=star>=0?rest.slice(star+1):rest.slice(rest.indexOf('/')>=0?rest.indexOf('/'):rest.length);
+      if(!urlPath.startsWith(prefix)) return false;
+      if(star>=0) return true;
+      if(suffix && !urlPath.endsWith(suffix)) return false;
+      return urlPath.slice(prefix.length, suffix?urlPath.length-suffix.length:undefined).length>0 && !urlPath.slice(prefix.length, suffix?urlPath.length-suffix.length:undefined).includes('/');
+    };
+    if(fs.existsSync(sitemapPath)){
+      const sitemapXml=fs.readFileSync(sitemapPath,'utf8');
+      const sitemapUrls=[];
+      for(const chunk of sitemapXml.split('<loc>').slice(1)){
+        const end=chunk.indexOf('</loc>');
+        if(end>=0) sitemapUrls.push(chunk.slice(0,end).trim());
+      }
+      for(const url of sitemapUrls){
+        let urlPath='';
+        try{urlPath=new URL(url).pathname;}catch{continue;}
+        for(const source of staticRedirects.keys()){
+          if(redirectMatches(source,urlPath)) errors.push('sitemap contains redirect source: '+urlPath+' matched '+source);
+        }
+      }
+    }
+  }catch(e){
+    errors.push('invalid vercel.json: '+e.message);
+  }
+}
 const fourOhFour=path.join(ROOT,'404.html');
 if(fs.existsSync(fourOhFour) && !isNoindex(fs.readFileSync(fourOhFour,'utf8'))) errors.push('404.html must be noindex');
 
