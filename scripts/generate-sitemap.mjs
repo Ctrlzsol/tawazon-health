@@ -9,7 +9,7 @@ const SITE_ORIGIN=new URL(SITE).origin;
 function walk(dir){
   return fs.readdirSync(dir,{withFileTypes:true}).flatMap(entry=>{
     const full=path.join(dir,entry.name);
-    if(entry.name.startsWith('.') || entry.name==='node_modules') return [];
+    if(['.git','node_modules','dist','public'].includes(entry.name)) return [];
     return entry.isDirectory()?walk(full):[full];
   });
 }
@@ -31,9 +31,8 @@ for(const file of htmlFiles){
 }
 
 const unique=[...new Set(urls)].sort();
-const today=new Date().toISOString().slice(0,10);
 const xml='<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
- + unique.map(url=>`  <url><loc>${url}</loc><lastmod>${today}</lastmod></url>`).join('\n')
+ + unique.map(url=>`  <url><loc>${url}</loc></url>`).join('\n')
  + '\n</urlset>\n';
 fs.mkdirSync(path.join(ROOT,'dist'),{recursive:true});
 fs.writeFileSync(path.join(ROOT,'sitemap.xml'),xml);
