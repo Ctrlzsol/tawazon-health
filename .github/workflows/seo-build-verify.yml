@@ -17,3 +17,4 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: node --check scripts/seo-audit.mjs
       - run: npm run build
+      - run: npm run seo:audit
