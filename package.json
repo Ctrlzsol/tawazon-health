@@ -10,7 +10,8 @@
     "seo:production-audit": "node scripts/seo-production-audit.mjs",
     "seo:gsc-manifest": "node scripts/generate-gsc-manifest.mjs",
     "seo:live-audit": "node scripts/seo-live-audit.mjs",
-    "seo:verify": "npm run build && npm run seo:audit && npm run seo:performance && npm run check && node --check scripts/seo-audit.mjs && node --check scripts/seo-live-audit.mjs && node --check scripts/generate-gsc-manifest.mjs",
-    "seo:performance": "node scripts/seo-performance-audit.mjs"
+    "seo:verify": "npm run build && npm run seo:audit && npm run seo:content-graph && npm run seo:performance && npm run check && node --check scripts/seo-audit.mjs && node --check scripts/seo-live-audit.mjs && node --check scripts/generate-gsc-manifest.mjs",
+    "seo:performance": "node scripts/seo-performance-audit.mjs",
+    "seo:content-graph": "node scripts/seo-content-graph-audit.mjs"
   }
 }
