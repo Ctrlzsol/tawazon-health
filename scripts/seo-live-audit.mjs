@@ -6,6 +6,9 @@ const EXPECTED_404=["/this-route-does-not-exist-20261003","/article-not-a-real-a
 const NOINDEX_TESTS=[];
 const LEGACY_REDIRECTS=["/index.html"];
 const EXTRA_ORIGINS=[];
+const QUERY_TESTS=["/library.html","/article-protein-basics.html"];
+const SLASH_TESTS=[];
+const INDEX_TESTS=["/index.html"];
 
 const errors=[];
 const warnings=[];
@@ -82,6 +85,10 @@ function normalizeUrl(url){
   return u.href;
 }
 
+const robotsRes=await request(SITE+'/robots.txt');
+if(robotsRes.status!==200)errors.push('robots.txt returned '+robotsRes.status);
+if(!/Sitemap:\\s*https://tawazon-health\\.vercel\\.app\/sitemap\\.xml/i.test(robotsRes.body))errors.push('robots.txt is missing canonical sitemap directive');
+report.robots={status:robotsRes.status,contentType:robotsRes.contentType};
 const sitemapRes=await request(SITE+'/sitemap.xml');
 if(sitemapRes.status!==200)errors.push('sitemap.xml returned '+sitemapRes.status);
 if(!/xml/i.test(sitemapRes.contentType))warnings.push('sitemap content-type is '+sitemapRes.contentType);
@@ -101,9 +108,10 @@ for(let i=0;i<requestQueue.length;i++){
   if(res.status>=300&&res.status<400)errors.push('sitemap/page URL redirects: '+url+' -> '+res.location);
   if(res.status!==200)errors.push('page returned '+res.status+': '+url);
   if(res.elapsedMs>2500)warnings.push('slow response '+res.elapsedMs+'ms: '+url);
+  if(/(\\/study\\/|\\/guides\\/|\\/blog\\/|\\/article-)/.test(new URL(url).pathname)&&page.textChars<800)warnings.push('thin live content (<800 chars): '+url);
   if(res.contentLength>500000)warnings.push('HTML >500KB: '+url+' ('+res.contentLength+')');
   if(res.status===200&&/text\\/html/i.test(res.contentType)){
-    page.title=title(res.body);page.canonical=canonical(res.body);page.metaRobots=meta(res.body,'robots');page.h1=h1Count(res.body);
+    page.title=title(res.body);page.canonical=canonical(res.body);page.metaRobots=meta(res.body,'robots');page.h1=h1Count(res.body);const bodyText=res.body.replace(/<script[\\s\\S]*?<\\/script>/gi,' ').replace(/<style[\\s\\S]*?<\\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/\\s+/g,' ').trim();page.textChars=bodyText.length;
     if(!page.title)errors.push('missing title: '+url);
     if(!meta(res.body,'description'))errors.push('missing meta description: '+url);
     if(!page.canonical)errors.push('missing canonical: '+url);
@@ -123,6 +131,8 @@ for(let i=0;i<requestQueue.length;i++){
     const og=meta(res.body,'og:url');
     if(og&&page.canonical&&normalizeUrl(og)!==normalizeUrl(page.canonical))errors.push('og:url differs from canonical: '+url);
     if(/noindex/i.test(page.metaRobots)&&sitemapUrls.includes(url))errors.push('sitemap contains noindex page: '+url);
+    if(/noindex/i.test(page.robotsHeader)&&sitemapUrls.includes(url))errors.push('sitemap URL has X-Robots noindex: '+url);
+    if(!/noindex/i.test(page.metaRobots)&&/noindex/i.test(page.robotsHeader)&&sitemapUrls.includes(url))errors.push('HTML/header robots conflict: '+url);
     if(/noindex/i.test(page.robotsHeader)&&sitemapUrls.includes(url))errors.push('sitemap contains header-noindex page: '+url);
     const schemas=jsonLd(res.body);
     for(const data of schemas){
@@ -171,6 +181,22 @@ for(const path of NOINDEX_TESTS){
   const res=await request(new URL(path,SITE).href);
   if(res.status!==200)warnings.push('private test returned '+res.status+': '+path);
   if(!/noindex/i.test(res.robotsHeader)&&!/noindex/i.test(meta(res.body,'robots')))warnings.push('private route lacks noindex signals: '+path);
+}
+for(const path of QUERY_TESTS){
+  const res=await request(new URL(path+'?utm_source=seo-audit',SITE).href);
+  if(!(res.status===200||res.status===301||res.status===308))errors.push('query normalization returned '+res.status+': '+path);
+  if(res.status===200){
+    const c=canonical(res.body);
+    if(c&&/[?].*utm_source/.test(c))errors.push('canonical preserves tracking query: '+path+' -> '+c);
+  }
+}
+for(const path of SLASH_TESTS){
+  const res=await request(new URL(path,SITE).href);
+  if(res.status===404)errors.push('trailing-slash variant 404: '+path);
+}
+for(const path of INDEX_TESTS){
+  const res=await request(new URL(path,SITE).href);
+  if(res.status===200)warnings.push('index.html serves 200; verify canonical strategy: '+path);
 }
 for(const path of LEGACY_REDIRECTS){
   const res=await request(new URL(path,SITE).href);
