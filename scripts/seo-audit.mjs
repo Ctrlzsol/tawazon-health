@@ -176,7 +176,8 @@ if(!fs.existsSync(sitemapPath)){
       if(parsed.origin!==new URL(SITE).origin) errors.push('off-domain sitemap URL '+url);
       if(parsed.protocol!=='https:') errors.push('non-HTTPS sitemap URL '+url);
       if(parsed.search||parsed.hash) errors.push('sitemap URL contains query/hash '+url);
-      if(canonicalMap.has(url) && noindex(fs.readFileSync(path.join(ROOT,new URL(url).pathname.replace(/^\\//,'')+(url.endsWith('/')?'index.html':'')),'utf8'))) errors.push('noindex URL in sitemap '+url);
+      // A sitemap URL is validated against the indexable/canonical set above.
+      // Live noindex/header conflicts are checked by the production audit, not by guessing a filesystem path here.
     }catch{}
   }
 }
