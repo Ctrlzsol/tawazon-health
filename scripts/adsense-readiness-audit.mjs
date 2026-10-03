@@ -50,12 +50,12 @@ if(!adRoutes.length) critical.push('No AdSense loader found on an intended conte
 const verified=htmlFiles.filter(file=>hasPublisherMeta(read(file))||read(file).includes(PUBLISHER));
 if(!verified.length) critical.push('AdSense publisher ID/meta not found in generated HTML.');
 
-const adsFiles=[path.join(ROOT,'ads.txt'),path.resolve('ads.txt')].filter((file,i,array)=>fs.existsSync(file)&&array.indexOf(file)===i);
+const adsFiles=[path.join(ROOT,'ads.txt'),path.resolve('ads.txt')].filter((file,i,array)=>fs.existsSync(file)&&fs.statSync(file).isFile()&&array.indexOf(file)===i);
 if(!adsFiles.length){
   critical.push('ads.txt not found in deployed/source root.');
 }else{
   const adsText=adsFiles.map(read).join('\n');
-  const expected='google.com, '+PUBLISHER+', DIRECT, f08c47fec0942fa0';
+  const expected='google.com, '+PUBLISHER.replace(/^ca-/i,'')+', DIRECT, f08c47fec0942fa0';
   if(!adsText.includes(expected)) critical.push('ads.txt missing expected publisher authorization line.');
 }
 
