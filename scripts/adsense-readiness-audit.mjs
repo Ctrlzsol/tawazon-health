@@ -79,6 +79,12 @@ function isPrivate(route){return PRIVATE_PATTERNS.some(re=>re.test(route));}
 function noindex(html){return /\bnoindex\b/i.test(meta(html,'robots'));}
 function adLoader(html){return html.includes('pagead2.googlesyndication.com/pagead/js/adsbygoogle.js');}
 function directLoader(html){return /<script[^>]+src=["']https:\/\/pagead2\.googlesyndication\.com\/pagead\/js\/adsbygoogle\.js\?client=ca-pub-1304668609520202["']/i.test(html);}
+function conditionalLoader(html){return html.includes('document.createElement("script")')&&adLoader(html);}
+function effectiveLoader(html,route){
+  if(directLoader(html)) return true;
+  if(!conditionalLoader(html)) return false;
+  return isContent(route);
+}
 function adUnit(html){return /class=["'][^"']*adsbygoogle[^"']*["']/i.test(html)||/data-ad-client=["']ca-pub-1304668609520202["']/i.test(html);}
 function publisherMeta(html){return /<meta[^>]+name=["']google-adsense-account["'][^>]+content=["']ca-pub-1304668609520202["']/i.test(html);}
 function hasArabicLang(html){return /<html[^>]+lang=["']ar["']/i.test(html);}
@@ -103,7 +109,7 @@ for(const file of htmlFiles){
     if(!hasArabicLang(html))warnings.push('Content page missing lang="ar": '+route);
   }
 
-  const hasLoader=adLoader(html), hasUnit=adUnit(html);
+  const hasLoader=effectiveLoader(html,route), hasUnit=adUnit(html);
   if((hasLoader||hasUnit) && (isPolicy(route)||isPrivate(route))){
     blocking.push('AdSense code on policy/private utility page: '+route);
   }
