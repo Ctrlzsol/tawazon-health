@@ -36,7 +36,7 @@ function isNonContent(route){
 }
 
 function directAdScript(html){
-  return html.includes('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js');
+  return /<script[^>]+src=["']https:\/\/pagead2\.googlesyndication\.com\/pagead\/js\/adsbygoogle\.js\?client=[^"']+["'][^>]*>/i.test(html);
 }
 function conditionalAdScript(html){
   return html.includes('document.createElement("script")') && html.includes('pagead2.googlesyndication.com/pagead/js/adsbygoogle.js');
