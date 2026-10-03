@@ -41,7 +41,15 @@ function internal(html){
   const out=[];const origin=new URL(SITE).origin;
   for(const m of html.matchAll(/href=["']([^"']+)["']/gi)){
     const href=m[1].trim();if(!href||href.startsWith('#')||href.startsWith('mailto:')||href.startsWith('tel:'))continue;
-    try{const u=new URL(href,SITE);if(u.origin===origin){u.hash='';out.push(u.href);}}catch{}
+    try{
+      const u=new URL(href,SITE);
+      if(u.origin!==origin) continue;
+      u.hash='';
+      const ext=path.posix.extname(u.pathname).toLowerCase();
+      if(ext && !['.html','.htm'].includes(ext)) continue;
+      if(/^\/(?:api|assets)\//.test(u.pathname)) continue;
+      out.push(u.href);
+    }catch{}
   }
   return out;
 }
