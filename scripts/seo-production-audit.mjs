@@ -138,11 +138,23 @@ async function main(){
   if(fs.existsSync(configFile)){
     try{
       const config=JSON.parse(fs.readFileSync(configFile,'utf8'));
-      for(const rule of (config.redirects||[])){
+      const rules=Array.isArray(config.redirects)?config.redirects:[];
+      const params=pattern=>[...pattern.matchAll(/:([A-Za-z0-9_]+)(?:\\*)?/g)].map(m=>m[1]);
+      for(const rule of rules){
         const source=String(rule.source||'');
+        const destination=String(rule.destination||'');
         if(!source)continue;
-        let sample=source.replace(/:path\\*/g,'seo-probe').replace(/:[A-Za-z0-9_]+/g,'seo-sample');
-        const target=new URL(sample,SITE).href;
+        const sourceParams=params(source);
+        const destinationParams=params(destination);
+        if(sourceParams.length){
+          if(sourceParams.length!==destinationParams.length||sourceParams.some((x,i)=>x!==destinationParams[i])){
+            critical.push('redirect parameter mismatch '+source+' -> '+destination);
+          }else{
+            warnings.push('skipped live probe for parameterized redirect '+source+' -> '+destination);
+          }
+          continue;
+        }
+        const target=new URL(source,SITE).href;
         try{
           const result=await get(target);
           const expectedPermanent=rule.permanent!==false;
@@ -151,15 +163,16 @@ async function main(){
           const location=result.response.headers.get('location');
           if(!location)critical.push('redirect rule '+source+' missing Location');
           else{
-            const destination=new URL(location,target).href;
-            const destinationResult=await get(destination);
+            const destinationUrl=new URL(location,target).href;
+            const destinationResult=await get(destinationUrl);
             if(destinationResult.response.status>=300&&destinationResult.response.status<400)critical.push('redirect chain '+source+' -> '+location);
-            if([404,410].includes(destinationResult.response.status))critical.push('redirect target '+destination+' is '+destinationResult.response.status);
+            if([404,410].includes(destinationResult.response.status))critical.push('redirect target '+destinationUrl+' is '+destinationResult.response.status);
           }
         }catch(e){warnings.push('redirect probe failed '+source+' '+e);}
       }
     }catch(e){critical.push('invalid vercel.json '+e.message);}
   }
+
 
   const httpOrigin='http://'+new URL(SITE).host+'/';
   try{
