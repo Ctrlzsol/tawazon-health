@@ -5,11 +5,28 @@ const SITE="https://tawazon-health.vercel.app";
 const KIND="tawazon";
 const PUBLISHER='ca-pub-1304668609520202';
 const ROOT=fs.existsSync('dist')?path.resolve('dist'):path.resolve('.');
-const critical=[];
+const blocking=[];
 const warnings=[];
-const external=[];
+const manual=[];
+
+const CONTENT_PATTERNS={
+  jadwa:[/^\/$/,/^\/blog(?:\/|$)/,/^\/guides(?:\/|$)/],
+  muwathaq:[/^\/$/,/^\/guide$/, /^\/guides(?:\/|$)/],
+  tawazon:[/^\/$/,/^\/library(?:\.html)?$/, /^\/article-[^/]+\.html$/, /^\/topic-[^/]+\.html$/]
+};
+const POLICY_PATTERNS=[
+  /^\/privacy(?:\.html|\/|$)/,/^\/terms(?:\.html|\/|$)/,/^\/contact(?:\.html|\/|$)/,
+  /^\/about(?:\.html|\/|$)/,/^\/editorial(?:\.html|\/|$)/,/^\/review-process(?:\.html|\/|$)/,
+  /^\/disclaimer(?:\.html|\/|$)/,/^\/404(?:\.html|\/|$)/
+];
+const PRIVATE_PATTERNS=[
+  /^\/admin(?:\/|$)/,/^\/account(?:\/|$)/,/^\/login(?:\/|$)/,/^\/signup(?:\/|$)/,
+  /^\/checkout(?:\/|$)/,/^\/payment(?:\/|$)/,/^\/documents(?:\/|$)/,/^\/create(?:\/|$)/,
+  /^\/activate(?:\/|$)/
+];
 
 function walk(dir){
+  if(!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir,{withFileTypes:true}).flatMap(entry=>{
     const full=path.join(dir,entry.name);
     if(entry.name.startsWith('.')||entry.name==='node_modules') return [];
@@ -17,103 +34,150 @@ function walk(dir){
   });
 }
 function read(file){return fs.readFileSync(file,'utf8');}
-function hasAdSense(html){return html.includes('pagead2.googlesyndication.com/pagead/js/adsbygoogle.js');}
-function hasPublisherMeta(html){return html.includes('google-adsense-account')&&html.includes(PUBLISHER);}
-function isNoindex(html){return /<meta[^>]+name=["']robots["'][^>]+content=["'][^"']*noindex/i.test(html);}
+function attr(tag,name){
+  const lower=tag.toLowerCase();
+  for(const quote of ['"',"']){
+    const marker=name.toLowerCase()+'='+quote;
+    const start=lower.indexOf(marker);
+    if(start<0) continue;
+    const from=start+marker.length;
+    const end=tag.indexOf(quote,from);
+    if(end>=0) return tag.slice(from,end);
+  }
+  return '';
+}
+function tags(html,name){
+  const out=[];const lower=html.toLowerCase();const needle='<'+name.toLowerCase();let p=0;
+  while((p=lower.indexOf(needle,p))>=0){
+    const e=html.indexOf('>',p);if(e<0)break;
+    out.push(html.slice(p,e+1));p=e+1;
+  }
+  return out;
+}
+function meta(html,name){
+  for(const tag of tags(html,'meta'))if(attr(tag,'name').toLowerCase()===name.toLowerCase())return attr(tag,'content').trim();
+  return '';
+}
+function canonical(html){
+  for(const tag of tags(html,'link'))if(attr(tag,'rel').toLowerCase().split(/\s+/).includes('canonical'))return attr(tag,'href').trim();
+  return '';
+}
+function title(html){
+  const lower=html.toLowerCase();const start=lower.indexOf('<title');if(start<0)return '';
+  const openEnd=html.indexOf('>',start);const close=lower.indexOf('</title>',openEnd);
+  return openEnd>=0&&close>openEnd?html.slice(openEnd+1,close).trim():'';
+}
 function routeOf(file){
   const rel=path.relative(ROOT,file).replaceAll(path.sep,'/');
-  if(rel==='index.html') return '/';
-  if(rel.endsWith('/index.html')) return '/'+rel.slice(0,-'/index.html'.length);
+  if(rel==='index.html')return '/';
+  if(rel.endsWith('/index.html'))return '/'+rel.slice(0,-11);
   return '/'+rel.replace(/\.html$/,'');
 }
-function isContent(route){
-  if(KIND==='jadwa') return route==='/'||route.startsWith('/blog')||route.startsWith('/guides');
-  if(KIND==='muwathaq') return route==='/'||route==='/guide'||route.startsWith('/guides');
-  return route==='/'||route==='/library'||route==='/library.html'||route.startsWith('/article-')||route.startsWith('/topic-');
-}
-function isNonContent(route){
-  return /^(\/privacy|\/terms|\/contact|\/about|\/editorial|\/disclaimer|\/tools|\/generator|\/analyze|\/login|\/account|\/documents|\/activate|\/create|\/checkout|\/payment|\/404)/.test(route);
-}
+function isContent(route){return CONTENT_PATTERNS[KIND].some(re=>re.test(route));}
+function isPolicy(route){return POLICY_PATTERNS.some(re=>re.test(route));}
+function isPrivate(route){return PRIVATE_PATTERNS.some(re=>re.test(route));}
+function noindex(html){return /\bnoindex\b/i.test(meta(html,'robots'));}
+function adLoader(html){return html.includes('pagead2.googlesyndication.com/pagead/js/adsbygoogle.js');}
+function directLoader(html){return /<script[^>]+src=["']https:\/\/pagead2\.googlesyndication\.com\/pagead\/js\/adsbygoogle\.js\?client=ca-pub-1304668609520202["']/i.test(html);}
+function adUnit(html){return /class=["'][^"']*adsbygoogle[^"']*["']/i.test(html)||/data-ad-client=["']ca-pub-1304668609520202["']/i.test(html);}
+function publisherMeta(html){return /<meta[^>]+name=["']google-adsense-account["'][^>]+content=["']ca-pub-1304668609520202["']/i.test(html);}
+function hasArabicLang(html){return /<html[^>]+lang=["']ar["']/i.test(html);}
 
-function directAdScript(html){
-  return /<script[^>]+src=["']https:\/\/pagead2\.googlesyndication\.com\/pagead\/js\/adsbygoogle\.js\?client=[^"']+["'][^>]*>/i.test(html);
-}
-function conditionalAdScript(html){
-  return html.includes('document.createElement("script")') && html.includes('pagead2.googlesyndication.com/pagead/js/adsbygoogle.js');
-}
-function conditionalAdApplies(html,route){
-  if(!conditionalAdScript(html)) return false;
-  if(KIND==='jadwa') return route==='/' || route.startsWith('/blog/') || route.startsWith('/guides/');
-  if(KIND==='muwathaq') return route==='/' || route==='/guide' || route.startsWith('/guides/');
-  return false;
-}
 const htmlFiles=walk(ROOT).filter(file=>file.endsWith('.html'));
+let verificationPages=0;
+let contentWithAds=0;
 const adRoutes=[];
+const titleMap=new Map();
+const descriptionMap=new Map();
+
 for(const file of htmlFiles){
   const html=read(file);
   const route=routeOf(file);
-  const direct=directAdScript(html);
-  const conditional=conditionalAdApplies(html,route);
-  const effective=direct || conditional;
-  if(effective) {
-    adRoutes.push(route);
-    if(!isContent(route)||isNonContent(route)) critical.push('Effective AdSense on non-content/utility page: '+route);
-  } else if((direct||conditionalAdScript(html)) && (isContent(route)&&!isNonContent(route))){
-    // The shared SPA shell may contain a dormant conditional loader; this is not an active ad placement on this route.
+  const c=isContent(route)&&!noindex(html);
+  if(c){
+    if(publisherMeta(html))verificationPages++;
+    if(adLoader(html)||adUnit(html))contentWithAds++;
+    const t=title(html),d=meta(html,'description');
+    if(t){if(titleMap.has(t))warnings.push('Duplicate content title: '+route+' and '+titleMap.get(t));else titleMap.set(t,route);}
+    if(d){if(descriptionMap.has(d))warnings.push('Duplicate meta description: '+route+' and '+descriptionMap.get(d));else descriptionMap.set(d,route);}
+    if(!hasArabicLang(html))warnings.push('Content page missing lang="ar": '+route);
+  }
+
+  const hasLoader=adLoader(html), hasUnit=adUnit(html);
+  if((hasLoader||hasUnit) && (isPolicy(route)||isPrivate(route))){
+    blocking.push('AdSense code on policy/private utility page: '+route);
+  }
+  if((hasLoader||hasUnit) && noindex(html)){
+    blocking.push('AdSense code on noindex page: '+route);
+  }
+  if(hasLoader||hasUnit)adRoutes.push(route);
+  if(c && !title(html))blocking.push('Content page missing title: '+route);
+  if(c && !meta(html,'description'))blocking.push('Content page missing meta description: '+route);
+  if(c && !canonical(html))blocking.push('Content page missing canonical: '+route);
+}
+
+if(verificationPages===0)blocking.push('No content page contains the AdSense publisher verification meta tag.');
+if(contentWithAds===0)manual.push('No effective AdSense loader/unit detected on content HTML. The publisher meta tag is present, but verify the AdSense Site verification state in the account.');
+
+const adsPaths=[path.join(ROOT,'ads.txt'),path.resolve('ads.txt')].filter((f,i,a)=>fs.existsSync(f)&&fs.statSync(f).isFile()&&a.indexOf(f)===i);
+const expectedAds='google.com, pub-1304668609520202, DIRECT, f08c47fec0942fa0';
+if(adsPaths.length){
+  const text=adsPaths.map(read).join('\n');
+  if(!text.split(/\r?\n/).some(line=>line.trim()===expectedAds))blocking.push('ads.txt is present but missing the exact Google publisher line.');
+}else warnings.push('ads.txt is absent. It is recommended by Google but is not an AdSense approval prerequisite.');
+
+const privacy=htmlFiles.find(f=>/\/privacy\.html$|\/privacy\/index\.html$|^privacy\.html$/i.test(f.replaceAll(path.sep,'/')));
+if(!privacy){
+  blocking.push('Privacy policy page not found.');
+}else{
+  const p=read(privacy);
+  if(!/Google/i.test(p))blocking.push('Privacy policy does not disclose Google advertising/data use.');
+  if(!/cookie|ملفات تعريف الارتباط|ملفات الارتباط/i.test(p))blocking.push('Privacy policy does not disclose cookies.');
+  if(!/myadcenter\.google\.com|مركز إعلانات Google|Ads Settings/i.test(p))warnings.push('Privacy policy lacks a direct Google Ads personalization control link.');
+  if(!/policies\.google\.com\/technologies\/partner-sites/i.test(p))warnings.push('Privacy policy lacks Google partner-site data-use reference.');
+}
+
+const requiredQualityRoutes=['/about','/contact'];
+const availableRoutes=new Set(htmlFiles.map(routeOf));
+for(const route of requiredQualityRoutes){
+  const equivalent=route==='about'?['/about','/about.html']:['/contact','/contact.html'];
+  if(!equivalent.some(x=>availableRoutes.has(x))) warnings.push('Recommended transparency page not found: '+route);
+}
+
+const robotsFiles=[path.join(ROOT,'robots.txt'),path.resolve('robots.txt')].filter((f,i,a)=>fs.existsSync(f)&&fs.statSync(f).isFile()&&a.indexOf(f)===i);
+if(!robotsFiles.length){
+  const apiRobots=path.resolve('api','robots.js');
+  if(fs.existsSync(apiRobots)) manual.push('robots.txt is generated dynamically by api/robots.js; verify the live /robots.txt response.');
+  else warnings.push('No local robots.txt source found.');
+}
+
+const cmpDetected=htmlFiles.some(f=>/googlefc|fundingchoicesmessages|__tcfapi|onetrust|consentmanager/i.test(read(f)));
+if(!cmpDetected && adRoutes.length){
+  manual.push('No certified TCF CMP detected in source. Before personalized ads are served to EEA/UK/Switzerland users, configure a Google-certified CMP integrated with IAB TCF or use an appropriate Google-supported consent setup.');
+}
+
+if(KIND==='tawazon'){
+  const sourceText=htmlFiles.map(read).join('\n');
+  if(/setTargeting\s*\(|google_ad_(?:channel|test|host|format|safe|section)|data-ad-keywords|remarketing|user_provided_data|customer_match/i.test(sourceText)){
+    blocking.push('Potential custom audience/remarketing targeting detected on health content; remove it before serving personalized ads.');
   }
 }
 
-const verified=htmlFiles.filter(file=>hasPublisherMeta(read(file))||read(file).includes(PUBLISHER));
-if(!verified.length) critical.push('AdSense publisher ID/meta not found in generated HTML.');
-
-const adsFiles=[path.join(ROOT,'ads.txt'),path.resolve('ads.txt')].filter((file,i,array)=>fs.existsSync(file)&&fs.statSync(file).isFile()&&array.indexOf(file)===i);
-if(!adsFiles.length){
-  critical.push('ads.txt not found in deployed/source root.');
-}else{
-  const adsText=adsFiles.map(read).join('\n');
-  const expected='google.com, '+PUBLISHER.replace(/^ca-/i,'')+', DIRECT, f08c47fec0942fa0';
-  if(!adsText.includes(expected)) critical.push('ads.txt missing expected publisher authorization line.');
-}
-
-const privacyFiles=htmlFiles.filter(file=>/(^|\/)privacy(?:\/index)?\.html$/i.test(file)||/\/privacy\.html$/i.test(file));
-if(!privacyFiles.length) critical.push('Privacy policy page not found.');
-else{
-  const privacy=read(privacyFiles[0]);
-  if(!/Google/i.test(privacy)) critical.push('Privacy policy does not mention Google advertising.');
-  if(!/ملفات تعريف الارتباط|cookies/i.test(privacy)) critical.push('Privacy policy does not disclose cookies.');
-  if(!/myadcenter\.google\.com|مركز إعلانات Google|Ads Settings/i.test(privacy)) critical.push('Privacy policy lacks Google ad personalization opt-out information.');
-  if(!/aboutads\.info/i.test(privacy)) critical.push('Privacy policy lacks third-party ad opt-out reference.');
-}
-
-const robotsFiles=[path.join(ROOT,'robots.txt'),path.resolve('robots.txt')].filter((file,i,array)=>fs.existsSync(file)&&array.indexOf(file)===i);
-if(robotsFiles.length){
-  const robots=read(robotsFiles[0]).toLowerCase();
-  if(!robots.includes(('sitemap: '+SITE+'/sitemap.xml').toLowerCase())) warnings.push('robots.txt does not expose canonical sitemap URL.');
-  if(/disallow:\s*\/\s*$/mi.test(robots)) critical.push('robots.txt blocks the entire site.');
-}else{
-  critical.push('robots.txt not found.');
-}
-
-const cmpPatterns=/googlefc|fundingchoicesmessages|__tcfapi|onetrust|consentmanager/i;
-const cmpDetected=htmlFiles.some(file=>cmpPatterns.test(read(file)));
-if(!cmpDetected&&adRoutes.length){
-  external.push('No detectable Google-certified CMP/TCF implementation in repository output. Configure Privacy & Messaging or another Google-certified TCF CMP before serving personalized ads to EEA/UK/Switzerland traffic.');
-}
-
 const report={
-  generatedAt:new Date().toISOString(),
   site:SITE,
   publisherId:PUBLISHER,
-  adScriptPages:adRoutes.length,
-  adScriptRoutes:adRoutes,
-  adsTxtPresent:adsFiles.length>0,
-  privacyPolicyPresent:privacyFiles.length>0,
-  publisherVerificationDetected:verified.length>0,
+  publicContentPages:[...new Set(htmlFiles.map(routeOf).filter(isContent))].length,
+  verificationPages,
+  contentWithAds,
+  adCodeRoutes:[...new Set(adRoutes)].sort(),
+  adsTxt:{present:adsPaths.length>0,expectedLine:expectedAds},
+  privacyPolicyPresent:!!privacy,
   cmpDetected,
-  critical,
+  blocking,
   warnings,
-  external
+  manual,
+  google:{supportedPrimaryLanguage:'Arabic',sourceCodeAccess:true,originalContent:'manual review required',policyCompliance:'manual review required',siteReachability:'live verification required',ssl:'live verification required',siteOwnership:'publisher meta present',europeanConsent:'account/CMP configuration required'}
 };
 fs.writeFileSync('adsense-readiness.json',JSON.stringify(report,null,2));
 console.log(JSON.stringify(report,null,2));
-if(critical.length) process.exitCode=1;
+if(blocking.length)process.exit(1);
