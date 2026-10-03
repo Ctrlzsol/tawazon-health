@@ -102,7 +102,7 @@ for(const file of htmlFiles){
   const c=isContent(route)&&!noindex(html);
   if(c){
     if(publisherMeta(html))verificationPages++;
-    if(adLoader(html)||adUnit(html))contentWithAds++;
+    if(effectiveLoader(html,route)||adUnit(html))contentWithAds++;
     const t=title(html),d=meta(html,'description');
     if(t){if(titleMap.has(t))warnings.push('Duplicate content title: '+route+' and '+titleMap.get(t));else titleMap.set(t,route);}
     if(d){if(descriptionMap.has(d))warnings.push('Duplicate meta description: '+route+' and '+descriptionMap.get(d));else descriptionMap.set(d,route);}
