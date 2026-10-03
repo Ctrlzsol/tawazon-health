@@ -29,7 +29,7 @@ function routeOf(file){
 function isContent(route){
   if(KIND==='jadwa') return route==='/'||route.startsWith('/blog')||route.startsWith('/guides');
   if(KIND==='muwathaq') return route==='/'||route==='/guide'||route.startsWith('/guides');
-  return route==='/'||route==='/library.html'||route.startsWith('/article-')||route.startsWith('/topic-');
+  return route==='/'||route==='/library'||route==='/library.html'||route.startsWith('/article-')||route.startsWith('/topic-');
 }
 function isNonContent(route){
   return /^(\/privacy|\/terms|\/contact|\/about|\/editorial|\/disclaimer|\/tools|\/generator|\/analyze|\/login|\/account|\/documents|\/activate|\/create|\/checkout|\/payment|\/404)/.test(route);
