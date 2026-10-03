@@ -17,7 +17,7 @@ function walk(dir){
   });
 }
 function read(file){return fs.readFileSync(file,'utf8');}
-function hasAdSense(html){return /pagead\.googlesyndication\.com\/pagead\/js\/adsbygoogle\.js/i.test(html);}
+function hasAdSense(html){return html.includes('pagead2.googlesyndication.com/pagead/js/adsbygoogle.js');}
 function hasPublisherMeta(html){return html.includes('google-adsense-account')&&html.includes(PUBLISHER);}
 function isNoindex(html){return /<meta[^>]+name=["']robots["'][^>]+content=["'][^"']*noindex/i.test(html);}
 function routeOf(file){
