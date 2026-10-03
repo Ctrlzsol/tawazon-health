@@ -23,6 +23,8 @@ jobs:
         run: npm run build
       - name: Static SEO audit
         run: npm run seo:audit
+      - name: AdSense readiness audit
+        run: npm run adsense:verify
       - name: Content graph audit
         run: npm run seo:content-graph
       - name: Performance audit
@@ -51,4 +53,5 @@ jobs:
             seo-content-graph-audit.json
             seo-performance-audit.json
             gsc-indexing-manifest.json
+            adsense-readiness.json
           if-no-files-found: ignore
