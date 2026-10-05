@@ -54,7 +54,9 @@ for(const a of articles){
  const toc=a.sections.map(([h],i)=>`<a href="#s${i+1}">${esc(h)}</a>`).join('');
  const sections=a.sections.map(([h,p],i)=>`<section id="s${i+1}"><span class="chapter">0${i+1}</span><h2>${esc(h)}</h2><p>${esc(p)}</p></section>`).join('');
  const sources=a.sources.map(([name,url])=>`<li><a href="${url}" rel="noopener noreferrer" target="_blank">${esc(name)} ↗</a></li>`).join('');
- const related=articles.filter(x=>x.slug!==a.slug&&x.category===a.category).slice(0,3).map(x=>`<a href="/article-${x.slug}.html"><span aria-hidden="true">↖</span><b>${x.title}</b></a>`).join('');
+ const categoryPeers=articles.filter(x=>x.slug!==a.slug&&x.category===a.category);
+ const rotation=articles.filter(x=>x.category===a.category).findIndex(x=>x.slug===a.slug);
+ const related=categoryPeers.length?Array.from({length:Math.min(3,categoryPeers.length)},(_,offset)=>categoryPeers[(rotation+offset)%categoryPeers.length]).map(x=>`<a href="/article-${x.slug}.html"><span aria-hidden="true">↖</span><b>${x.title}</b></a>`).join(''):'';
  const crossMap={nutrition:['digestion','weight'],weight:['nutrition','movement'],movement:['weight','sleep'],sleep:['movement','digestion'],digestion:['nutrition','weight'],supplements:['nutrition','movement']};
  const crossRelated=[...(crossMap[a.category]||[]).flatMap(category=>articles.filter(x=>x.slug!==a.slug&&x.category===category))].slice(0,4).map(x=>`<a href="/article-${x.slug}.html"><span aria-hidden="true">↗</span><b>${x.title}</b></a>`).join('');
 
