@@ -41,5 +41,11 @@
       "destination": "/",
       "permanent": true
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/ads.txt",
+      "destination": "/api/ads"
+    }
   ]
 }
